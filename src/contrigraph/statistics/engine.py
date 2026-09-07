@@ -75,12 +75,21 @@ class StatisticsEngine:
 
         # Calculate current streak ending at the end of the timeline
         curr_streak = 0
-        for day in reversed(days):
-            if day.count > 0:
-                curr_streak += 1
-            else:
-                # If the last day has 0 contributions, check if yesterday was active
-                break
+        now_year = datetime.now().year
+        is_past_year = calendar.year is not None and calendar.year < now_year
+
+        if not is_past_year and days:
+            check_days = list(reversed(days))
+            # If the last day (today) has 0 contributions, check if yesterday was active
+            if check_days[0].count == 0 and len(check_days) > 1:
+                check_days = check_days[1:]
+
+            for day in check_days:
+                if day.count > 0:
+                    curr_streak += 1
+                else:
+                    break
+
         current_streak = curr_streak
 
         active_percentage = round((active_days_count / total_days) * 100, 1) if total_days > 0 else 0.0

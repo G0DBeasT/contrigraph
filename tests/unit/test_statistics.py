@@ -68,3 +68,66 @@ def test_empty_calendar_statistics():
     assert stats.current_streak == 0
     assert stats.longest_streak == 0
     assert stats.active_days == 0
+
+
+def test_current_streak_inactive_today_preserves_streak():
+    """Verify streak ending yesterday is preserved if today has 0 contributions."""
+    days = [
+        ContributionDay(date="2026-09-04", count=0, level=0, weekday=5),
+        ContributionDay(date="2026-09-05", count=3, level=2, weekday=6),
+        ContributionDay(date="2026-09-06", count=5, level=3, weekday=0),  # Yesterday (active)
+        ContributionDay(date="2026-09-07", count=0, level=0, weekday=1),  # Today (no commits yet)
+    ]
+    cal = ContributionCalendar(
+        username="streakuser",
+        year=2026,
+        from_date="2026-09-04",
+        to_date="2026-09-07",
+        total_contributions=8,
+        weeks=[ContributionWeek(days=days)],
+    )
+    stats = StatisticsEngine.calculate(cal)
+    assert stats.current_streak == 2
+    assert stats.longest_streak == 2
+
+
+def test_current_streak_multiple_inactive_days_resets():
+    """Verify current streak resets to 0 if both today and yesterday had 0 contributions."""
+    days = [
+        ContributionDay(date="2026-09-04", count=3, level=2, weekday=5),
+        ContributionDay(date="2026-09-05", count=4, level=2, weekday=6),
+        ContributionDay(date="2026-09-06", count=0, level=0, weekday=0),  # Yesterday (inactive)
+        ContributionDay(date="2026-09-07", count=0, level=0, weekday=1),  # Today (inactive)
+    ]
+    cal = ContributionCalendar(
+        username="streakuser",
+        year=2026,
+        from_date="2026-09-04",
+        to_date="2026-09-07",
+        total_contributions=7,
+        weeks=[ContributionWeek(days=days)],
+    )
+    stats = StatisticsEngine.calculate(cal)
+    assert stats.current_streak == 0
+    assert stats.longest_streak == 2
+
+
+def test_current_streak_past_year_returns_zero():
+    """Verify past historical years do not report an ongoing current streak."""
+    days = [
+        ContributionDay(date="2022-12-29", count=2, level=1, weekday=4),
+        ContributionDay(date="2022-12-30", count=3, level=2, weekday=5),
+        ContributionDay(date="2022-12-31", count=5, level=3, weekday=6),
+    ]
+    cal = ContributionCalendar(
+        username="pastuser",
+        year=2022,
+        from_date="2022-12-29",
+        to_date="2022-12-31",
+        total_contributions=10,
+        weeks=[ContributionWeek(days=days)],
+    )
+    stats = StatisticsEngine.calculate(cal)
+    assert stats.current_streak == 0
+    assert stats.longest_streak == 3
+
