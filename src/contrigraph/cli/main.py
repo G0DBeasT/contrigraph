@@ -93,15 +93,24 @@ def cmd_auth(args: argparse.Namespace) -> int:
         console.print("[dim]Create a token at: [underline]https://github.com/settings/tokens[/underline][/dim]")
         console.print("[dim]Required permissions: Public data (read-only) or read:user (optional, for private counts).[/dim]\n")
 
-        token = args.token
-        if not token:
+        token = None
+        if getattr(args, "token_stdin", False):
+            try:
+                token = sys.stdin.read().strip()
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n[yellow]Authentication cancelled.[/yellow]")
+                return 1
+        elif getattr(args, "token", None):
+            token = args.token
+            console.print("[yellow]Warning: Passing token via --token exposes secrets in process list and shell history. Use --token-stdin or interactive prompt instead.[/yellow]")
+        else:
             try:
                 token = getpass.getpass("Enter your GitHub Personal Access Token (hidden): ")
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[yellow]Authentication cancelled.[/yellow]")
                 return 1
 
-        token = token.strip()
+        token = token.strip() if token else ""
         if not token:
             console.print("[bold red]Error:[/bold red] Token cannot be empty.")
             return 1
@@ -291,7 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
     # 2. auth
     p_auth = subparsers.add_parser("auth", help="Manage GitHub authentication")
     p_auth.add_argument("auth_action", nargs="?", choices=["login", "status", "logout"], default="status", help="Auth action")
-    p_auth.add_argument("--token", help="GitHub Personal Access Token")
+    p_auth.add_argument("--token", help="GitHub Personal Access Token (deprecated: use --token-stdin or interactive prompt)")
+    p_auth.add_argument("--token-stdin", action="store_true", help="Read GitHub Personal Access Token from standard input")
     p_auth.add_argument("--no-validate", action="store_true", help="Skip remote token validation during login")
 
     # 3. show

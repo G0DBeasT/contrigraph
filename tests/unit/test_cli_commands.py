@@ -107,3 +107,32 @@ def test_doctor_failure_states(mock_env):
     # Not configured, not authenticated
     success = doc.run_diagnostics()
     assert not success
+
+
+def test_cli_auth_login_token_stdin(mock_env):
+    """Verify auth login --token-stdin reads token from standard input."""
+    with patch("sys.stdin.read", return_value="ghp_stdin_token_1234567890\n"), \
+         patch("contrigraph.auth.manager.AuthManager.login") as mock_login:
+        from contrigraph.auth.manager import AuthCredentials
+        mock_login.return_value = AuthCredentials(token="ghp_stdin_token_1234567890", username="testuser")
+        res = main(["auth", "login", "--token-stdin", "--no-validate"])
+        assert res == 0
+        mock_login.assert_called_once_with("ghp_stdin_token_1234567890", validate=False)
+
+
+def test_cli_auth_login_token_stdin_empty(mock_env):
+    """Verify auth login --token-stdin with empty input fails cleanly."""
+    with patch("sys.stdin.read", return_value="   \n"):
+        res = main(["auth", "login", "--token-stdin"])
+        assert res == 1
+
+
+def test_cli_auth_login_token_arg_warning(mock_env):
+    """Verify passing --token shows warning and proceeds."""
+    with patch("contrigraph.auth.manager.AuthManager.login") as mock_login:
+        from contrigraph.auth.manager import AuthCredentials
+        mock_login.return_value = AuthCredentials(token="ghp_arg_token_1234567890", username="testuser")
+        res = main(["auth", "login", "--token", "ghp_arg_token_1234567890", "--no-validate"])
+        assert res == 0
+        mock_login.assert_called_once_with("ghp_arg_token_1234567890", validate=False)
+
