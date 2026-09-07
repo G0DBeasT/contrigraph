@@ -81,3 +81,27 @@ def test_historical_year_cache_permanence_rules(temp_dir):
     cached_2025 = mgr.get("histuser", 2025, ttl_hours=4)
     assert cached_2025 is None
 
+
+def test_concurrent_cache_writes(temp_dir):
+    """Verify concurrent write operations do not collide or corrupt cache files."""
+    import concurrent.futures
+    cache_dir = temp_dir / "cache"
+    mgr = CacheManager(cache_dir=cache_dir)
+    payload = make_mock_calendar_payload("concurrentuser", total_contributions=300)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "concurrentuser", 2026)
+
+    def write_op(idx: int):
+        mgr.set(cal)
+        return True
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(write_op, i) for i in range(20)]
+        results = [f.result() for f in futures]
+
+    assert all(results)
+    cached = mgr.get("concurrentuser", 2026, ttl_hours=4)
+    assert cached is not None
+    assert cached.username == "concurrentuser"
+    assert cached.total_contributions == 300
+
+

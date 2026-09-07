@@ -1,9 +1,11 @@
 """Configuration management and persistence for contrigraph."""
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from contrigraph.utils.errors import ConfigNotFoundError, InvalidConfigError
@@ -119,11 +121,16 @@ class ConfigManager:
         """Save UserConfig to disk atomically."""
         config.updated_at = datetime.now(timezone.utc).isoformat()
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        temp_file = self.config_path.with_suffix(".tmp")
+        fd, tmp_path_str = tempfile.mkstemp(
+            dir=str(self.config_dir),
+            prefix=f".{self.config_path.name}.",
+            suffix=".tmp",
+        )
+        temp_file = Path(tmp_path_str)
         try:
-            with open(temp_file, "w", encoding="utf-8") as f:
+            with open(fd, "w", encoding="utf-8") as f:
                 json.dump(config.to_dict(), f, indent=2)
-            temp_file.replace(self.config_path)
+            os.replace(temp_file, self.config_path)
         except Exception as err:
             if temp_file.exists():
                 temp_file.unlink(missing_ok=True)

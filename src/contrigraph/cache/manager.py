@@ -1,8 +1,10 @@
 """Local caching system for contribution calendars."""
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from contrigraph.models.calendar import ContributionCalendar
@@ -72,11 +74,16 @@ class CacheManager:
             "data": calendar.to_dict(),
         }
 
-        temp_file = cache_file.with_suffix(".tmp")
+        fd, tmp_path_str = tempfile.mkstemp(
+            dir=str(self.cache_dir),
+            prefix=f".{cache_file.name}.",
+            suffix=".tmp",
+        )
+        temp_file = Path(tmp_path_str)
         try:
-            with open(temp_file, "w", encoding="utf-8") as f:
+            with open(fd, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
-            temp_file.replace(cache_file)
+            os.replace(temp_file, cache_file)
         except Exception:
             if temp_file.exists():
                 temp_file.unlink(missing_ok=True)

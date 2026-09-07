@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -170,12 +171,17 @@ class AuthManager:
 
         creds = AuthCredentials(token=clean_token, username=username, scopes=scopes)
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        temp_file = self.auth_path.with_suffix(".tmp")
+        fd, tmp_path_str = tempfile.mkstemp(
+            dir=str(self.config_dir),
+            prefix=f".{self.auth_path.name}.",
+            suffix=".tmp",
+        )
+        temp_file = Path(tmp_path_str)
         try:
-            with open(temp_file, "w", encoding="utf-8") as f:
+            with open(fd, "w", encoding="utf-8") as f:
                 json.dump(creds.to_dict(), f, indent=2)
             set_secure_file_permissions(temp_file)
-            temp_file.replace(self.auth_path)
+            os.replace(temp_file, self.auth_path)
             set_secure_file_permissions(self.auth_path)
             return creds
         except Exception as err:
