@@ -68,3 +68,14 @@ def test_normalize_graphql_months_without_first_week_idx_field():
     month_indices = [m.first_week_idx for m in calendar.months]
     assert month_indices == [0, 4, 8, 12, 17, 21, 25, 30, 34, 39, 43, 47]
 
+
+def test_normalize_graphql_null_data_payload():
+    """Verify normalize_graphql_response safely handles {'data': None} without raising AttributeError."""
+    payload = {"data": None}
+    calendar = ContributionNormalizer.normalize_graphql_response(payload, "nulluser", 2026)
+    assert calendar.username == "nulluser"
+    assert calendar.total_contributions == 0
+    assert len(calendar.weeks) == 0
+    assert len(calendar.months) == 0
+
+

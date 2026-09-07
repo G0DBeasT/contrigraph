@@ -56,3 +56,23 @@ def test_rate_limit_check():
         res = client.check_rate_limit()
         assert res["remaining"] == 4990
         assert res["limit"] == 5000
+
+
+def test_null_data_payload_raises_user_not_found():
+    """Verify payload with data: null raises UserNotFoundError instead of AttributeError."""
+    client = GitHubClient(token="mock_valid_token")
+    mock_payload = {"data": None, "errors": []}
+
+    with patch.object(client, "_execute_graphql", return_value=mock_payload):
+        with pytest.raises(UserNotFoundError):
+            client.fetch_contributions("nulluser")
+
+
+def test_null_data_rate_limit_returns_empty_dict():
+    """Verify rate limit with data: null returns empty dict instead of AttributeError."""
+    client = GitHubClient(token="mock_valid_token")
+    mock_payload = {"data": None, "errors": []}
+
+    with patch.object(client, "_execute_graphql", return_value=mock_payload):
+        res = client.check_rate_limit()
+        assert res == {}

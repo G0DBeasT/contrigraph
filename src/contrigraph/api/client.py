@@ -177,7 +177,7 @@ class GitHubClient:
             variables["to"] = f"{year}-12-31T23:59:59Z"
 
         payload = self._execute_graphql(GRAPHQL_QUERY, variables)
-        user_node = payload.get("data", {}).get("user")
+        user_node = (payload.get("data") or {}).get("user")
         if not user_node:
             raise UserNotFoundError(clean_user)
 
@@ -190,4 +190,4 @@ class GitHubClient:
     def check_rate_limit(self) -> dict[str, Any]:
         """Query current GraphQL API rate limit information."""
         payload = self._execute_graphql(RATE_LIMIT_QUERY)
-        return payload.get("data", {}).get("rateLimit", {})
+        return (payload.get("data") or {}).get("rateLimit") or {}

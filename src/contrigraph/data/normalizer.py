@@ -23,13 +23,11 @@ class ContributionNormalizer:
         year: int | None = None,
     ) -> ContributionCalendar:
         """Parse raw GitHub GraphQL JSON into ContributionCalendar."""
-        user_data = payload.get("data", {}).get("user", {})
-        if not user_data:
-            # Handle direct user object if wrapper omitted
-            user_data = payload.get("user", {})
+        data_node = payload.get("data") or {}
+        user_data = data_node.get("user") or payload.get("user") or {}
 
-        collection = user_data.get("contributionsCollection", {})
-        cal_data = collection.get("contributionCalendar", {})
+        collection = user_data.get("contributionsCollection") or {}
+        cal_data = collection.get("contributionCalendar") or {}
 
         total_contributions = int(cal_data.get("totalContributions", 0))
         total_commits = int(collection.get("totalCommitContributions", 0))
