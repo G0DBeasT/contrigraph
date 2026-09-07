@@ -56,10 +56,10 @@ class DensityEngine:
         if count <= 0:
             return 0
         q25, q50, q75 = cutoffs
-        if count < q25:
+        if count <= q25:
             return 1
-        if count < q50:
+        if count <= q50:
             return 2
-        if count < q75:
+        if count <= q75:
             return 3
         return 4

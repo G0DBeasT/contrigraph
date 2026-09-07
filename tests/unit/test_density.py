@@ -36,3 +36,27 @@ def test_adaptive_density_quartiles():
     assert DensityEngine.calculate_adaptive_level(0, cutoffs) == 0
     assert DensityEngine.calculate_adaptive_level(1, cutoffs) == 1
     assert DensityEngine.calculate_adaptive_level(25, cutoffs) == 4
+
+
+def test_adaptive_density_boundary_inclusivity():
+    """Verify exact quartile boundary values are inclusive in levels 1, 2, and 3."""
+    cutoffs = (1, 5, 20)
+    assert DensityEngine.calculate_adaptive_level(0, cutoffs) == 0
+    assert DensityEngine.calculate_adaptive_level(1, cutoffs) == 1   # count == q25 must be level 1
+    assert DensityEngine.calculate_adaptive_level(2, cutoffs) == 2   # count > q25 and <= q50
+    assert DensityEngine.calculate_adaptive_level(5, cutoffs) == 2   # count == q50 must be level 2
+    assert DensityEngine.calculate_adaptive_level(6, cutoffs) == 3   # count > q50 and <= q75
+    assert DensityEngine.calculate_adaptive_level(20, cutoffs) == 3  # count == q75 must be level 3
+    assert DensityEngine.calculate_adaptive_level(21, cutoffs) == 4  # count > q75 must be level 4
+
+
+def test_adaptive_density_small_and_sparse_datasets():
+    """Verify density calculations on small and sparse datasets."""
+    # Single element
+    cutoffs_single = DensityEngine.calculate_quartiles([1])
+    assert DensityEngine.calculate_adaptive_level(1, cutoffs_single) == 1
+
+    # Identical elements
+    cutoffs_same = DensityEngine.calculate_quartiles([3, 3, 3, 3])
+    assert DensityEngine.calculate_adaptive_level(3, cutoffs_same) == 1
+
