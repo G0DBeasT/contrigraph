@@ -70,12 +70,30 @@ class ContributionNormalizer:
         months: list[ContributionMonth] = []
         raw_months = cal_data.get("months", [])
         if raw_months:
+            date_to_week: dict[str, int] = {}
+            for w_idx, week in enumerate(weeks):
+                for day in week.days:
+                    if day.date and day.date not in date_to_week:
+                        date_to_week[day.date] = w_idx
+
             for m_data in raw_months:
+                first_day_str = str(m_data.get("firstDay", ""))
+                first_week_idx: int | None = None
+                if first_day_str in date_to_week:
+                    first_week_idx = date_to_week[first_day_str]
+                elif "-" in first_day_str:
+                    for w_idx, week in enumerate(weeks):
+                        if any(d.date and d.date >= first_day_str for d in week.days):
+                            first_week_idx = w_idx
+                            break
+                if first_week_idx is None:
+                    first_week_idx = int(m_data.get("firstWeekIdx", 0))
+
                 months.append(
                     ContributionMonth(
                         name=str(m_data.get("name", "")),
                         year=int(m_data.get("year", year or 0)),
-                        first_week_idx=int(m_data.get("firstDay", "0").split("-")[1]) if "-" in str(m_data.get("firstDay")) else int(m_data.get("firstWeekIdx", 0)),
+                        first_week_idx=first_week_idx,
                         total_weeks=int(m_data.get("totalWeeks", 1)),
                     )
                 )

@@ -1,5 +1,8 @@
 """Mock data fixtures for GitHub API tests."""
 
+from datetime import datetime, timedelta
+
+
 def make_mock_calendar_payload(
     username: str = "octocat",
     total_contributions: int = 487,
@@ -8,16 +11,12 @@ def make_mock_calendar_payload(
 ) -> dict:
     """Generate realistic GraphQL contribution calendar payload."""
     weeks = []
-    wday = 4  # 2026-01-01 was Thursday (weekday index 4 where Sunday=0)
+    base_dt = datetime.strptime(start_date, "%Y-%m-%d")
 
-    # Simplified 52-week generation
     for w in range(num_weeks):
         days = []
         for d in range(7):
-            day_num = (w * 7) + d + 1
-            if day_num > 365:
-                break
-            # Create some active days with varying densities
+            cur_dt = base_dt + timedelta(days=(w * 7) + d)
             count = (w + d) % 15 if (w + d) % 3 != 0 else 0
             if count == 0:
                 level = "NONE"
@@ -30,12 +29,9 @@ def make_mock_calendar_payload(
             else:
                 level = "FOURTH_QUARTILE"
 
-            month = min(12, (day_num // 31) + 1)
-            day_of_month = ((day_num - 1) % 28) + 1
-            date_str = f"2026-{month:02d}-{day_of_month:02d}"
             days.append(
                 {
-                    "date": date_str,
+                    "date": cur_dt.strftime("%Y-%m-%d"),
                     "contributionCount": count,
                     "contributionLevel": level,
                     "weekday": d,

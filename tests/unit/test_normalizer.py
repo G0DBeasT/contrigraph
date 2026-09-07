@@ -39,3 +39,32 @@ def test_calendar_serialization():
     assert cal2.total_contributions == cal1.total_contributions
     assert len(cal2.weeks) == len(cal1.weeks)
     assert len(cal2.all_days()) == len(cal1.all_days())
+
+
+def test_normalize_month_headers_first_week_idx():
+    """Verify first_week_idx spans across 0..52 weeks and does not use month numbers 1..12."""
+    payload = make_mock_calendar_payload(username="octocat", total_contributions=200)
+    calendar = ContributionNormalizer.normalize_graphql_response(payload, "octocat", 2026)
+
+    month_indices = [m.first_week_idx for m in calendar.months]
+    month_names = [m.name for m in calendar.months]
+
+    assert len(month_indices) == 12
+    assert month_names == ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    assert month_indices == [0, 4, 8, 12, 17, 21, 25, 30, 34, 39, 43, 47]
+    # Ensure December is at week 47, NOT week 12
+    assert calendar.months[-1].name == "Dec"
+    assert calendar.months[-1].first_week_idx == 47
+
+
+def test_normalize_graphql_months_without_first_week_idx_field():
+    """Verify standard GitHub GraphQL responses without synthetic firstWeekIdx field resolve correctly."""
+    payload = make_mock_calendar_payload(username="octocat", total_contributions=200)
+    # Strip firstWeekIdx from raw months to simulate real GitHub GraphQL response
+    for m in payload["data"]["user"]["contributionsCollection"]["contributionCalendar"]["months"]:
+        m.pop("firstWeekIdx", None)
+
+    calendar = ContributionNormalizer.normalize_graphql_response(payload, "octocat", 2026)
+    month_indices = [m.first_week_idx for m in calendar.months]
+    assert month_indices == [0, 4, 8, 12, 17, 21, 25, 30, 34, 39, 43, 47]
+

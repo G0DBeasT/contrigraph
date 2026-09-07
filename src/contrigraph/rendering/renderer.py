@@ -50,7 +50,7 @@ class CalendarRenderer:
             return
 
         theme = get_theme(theme_name, no_color=no_color, ascii_mode=ascii_mode)
-        term_width = get_terminal_width()
+        term_width = self.console.width if (self.console and self.console.width) else get_terminal_width()
 
         # Render Header Info
         if not compact:

@@ -37,6 +37,34 @@ def test_renderer_output_terminal():
     assert "renderuser" in output
     assert "300" in output
     assert "Activity Insights" in output
+    # Month headers in 120-col view should include Jan at start, Jun in middle, Dec at end
+    assert "Jan" in output
+    assert "Jun" in output
+    assert "Dec" in output
+
+
+def test_renderer_month_headers_split_view():
+    """Verify split view (width < 110) renders month headers in both Part 1 and Part 2."""
+    payload = make_mock_calendar_payload("splituser", total_contributions=250)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "splituser", 2026)
+
+    string_io = io.StringIO()
+    console = Console(file=string_io, color_system=None, width=80)
+    renderer = CalendarRenderer(console=console)
+
+    renderer.render(calendar=cal, theme_name="github-dark", show_stats=False)
+    output = string_io.getvalue()
+
+    assert "Part 1: Early Period" in output
+    assert "Part 2: Later Period" in output
+    # Part 1 should have first half months, Part 2 should have second half months
+    part1_section = output.split("Part 2: Later Period")[0]
+    part2_section = output.split("Part 2: Later Period")[1]
+    assert "Jan" in part1_section
+    assert "Jun" in part1_section
+    assert "Aug" in part2_section
+    assert "Dec" in part2_section
+
 
 
 def test_renderer_formats_json_and_csv(capsys):
