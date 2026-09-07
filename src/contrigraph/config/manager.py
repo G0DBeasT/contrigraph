@@ -28,6 +28,23 @@ class UserConfig:
         """Convert configuration to dictionary."""
         return asdict(self)
 
+    @staticmethod
+    def _parse_bool(val: Any, default: bool = False) -> bool:
+        """Parse boolean values from diverse types including strings."""
+        if val is None:
+            return default
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return bool(val)
+        if isinstance(val, str):
+            cleaned = val.strip().lower()
+            if cleaned in ("true", "1", "yes", "y", "on", "enable", "enabled"):
+                return True
+            if cleaned in ("false", "0", "no", "n", "off", "disable", "disabled"):
+                return False
+        return bool(val)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserConfig":
         """Build UserConfig from dictionary with validation."""
@@ -35,14 +52,22 @@ class UserConfig:
         if not username or not isinstance(username, str) or not username.strip():
             raise InvalidConfigError("Invalid or missing 'username' in configuration.")
 
+        default_year_raw = data.get("default_year")
+        default_year = None
+        if default_year_raw is not None and str(default_year_raw).strip().lower() not in ("", "none", "null"):
+            try:
+                default_year = int(default_year_raw)
+            except (ValueError, TypeError):
+                default_year = None
+
         return cls(
             username=username.strip(),
             email=str(data.get("email", "")).strip(),
             theme=str(data.get("theme", "github-dark")),
-            default_year=data.get("default_year"),
+            default_year=default_year,
             cache_ttl_hours=int(data.get("cache_ttl_hours", 4)),
-            show_stats=bool(data.get("show_stats", True)),
-            compact_mode=bool(data.get("compact_mode", False)),
+            show_stats=cls._parse_bool(data.get("show_stats"), default=True),
+            compact_mode=cls._parse_bool(data.get("compact_mode"), default=False),
             created_at=str(data.get("created_at", datetime.now(timezone.utc).isoformat())),
             updated_at=str(data.get("updated_at", datetime.now(timezone.utc).isoformat())),
         )

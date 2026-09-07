@@ -54,3 +54,35 @@ def test_missing_username_validation():
     """Verify error on empty username."""
     with pytest.raises(InvalidConfigError):
         UserConfig.from_dict({"username": "   "})
+
+
+def test_boolean_config_string_coercion():
+    """Verify boolean config fields parse string values properly."""
+    # "false" string representations
+    for false_val in ("false", "FALSE", "0", "no", "off", "disable", "disabled", False):
+        cfg = UserConfig.from_dict({"username": "user", "show_stats": false_val, "compact_mode": False})
+        assert cfg.show_stats is False, f"Failed for {false_val}"
+
+    # "true" string representations
+    for true_val in ("true", "TRUE", "1", "yes", "on", "enable", "enabled", True):
+        cfg = UserConfig.from_dict({"username": "user", "show_stats": True, "compact_mode": true_val})
+        assert cfg.compact_mode is True, f"Failed for {true_val}"
+
+
+def test_config_manager_update_boolean_from_cli_string(temp_dir):
+    """Verify ConfigManager.update_config handles CLI string values for booleans."""
+    cfg_dir = temp_dir / "config"
+    mgr = ConfigManager(config_dir=cfg_dir)
+
+    mgr.save_config(UserConfig(username="user", show_stats=True, compact_mode=False))
+
+    # Disable show_stats via string "false"
+    mgr.update_config(show_stats="false")
+    loaded = mgr.load_config()
+    assert loaded.show_stats is False
+
+    # Enable compact_mode via string "true"
+    mgr.update_config(compact_mode="true")
+    loaded = mgr.load_config()
+    assert loaded.compact_mode is True
+
