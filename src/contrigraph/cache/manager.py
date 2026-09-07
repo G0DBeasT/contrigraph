@@ -45,16 +45,17 @@ class CacheManager:
             if fetched_at.tzinfo is None:
                 fetched_at = fetched_at.replace(tzinfo=timezone.utc)
 
-            # Historical completed years do not expire unless explicitly invalidated
+            # Historical completed years do not expire unless explicitly invalidated,
+            # but only if fetched AFTER that year concluded.
             current_year = now.year
-            is_past_year = year is not None and year < current_year
+            is_past_year_completed = year is not None and year < current_year and fetched_at.year > year
 
-            if not is_past_year:
+            if not is_past_year_completed:
                 age_seconds = (now - fetched_at).total_seconds()
                 if age_seconds > (ttl_hours * 3600):
                     return None
 
-            data = payload.get("data", {})
+            data = payload.get("data") or {}
             return ContributionCalendar.from_dict(data)
         except Exception:
             return None

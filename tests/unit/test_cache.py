@@ -45,3 +45,39 @@ def test_cache_clear_all_and_list(temp_dir):
     cleared_count = mgr.clear_all()
     assert cleared_count == 2
     assert len(mgr.get_cache_entries()) == 0
+
+
+def test_historical_year_cache_permanence_rules(temp_dir):
+    """Verify historical year caching only bypasses TTL if fetched after that year concluded."""
+    import json
+    cache_dir = temp_dir / "cache"
+    mgr = CacheManager(cache_dir=cache_dir)
+    payload = make_mock_calendar_payload("histuser", total_contributions=100)
+
+    # 1. Year 2024 fetched in 2025 (completed year) -> should NOT expire
+    cal_2024 = ContributionNormalizer.normalize_graphql_response(payload, "histuser", 2024)
+    mgr.set(cal_2024)
+    cache_file_2024 = mgr._get_cache_file("histuser", 2024)
+    with open(cache_file_2024, "r", encoding="utf-8") as f:
+        data_2024 = json.load(f)
+    data_2024["fetched_at"] = "2025-01-15T12:00:00+00:00"
+    with open(cache_file_2024, "w", encoding="utf-8") as f:
+        json.dump(data_2024, f)
+
+    cached_2024 = mgr.get("histuser", 2024, ttl_hours=4)
+    assert cached_2024 is not None
+    assert cached_2024.year == 2024
+
+    # 2. Year 2025 fetched mid-year in 2025 (partial year) -> SHOULD expire when queried in 2026
+    cal_2025 = ContributionNormalizer.normalize_graphql_response(payload, "histuser", 2025)
+    mgr.set(cal_2025)
+    cache_file_2025 = mgr._get_cache_file("histuser", 2025)
+    with open(cache_file_2025, "r", encoding="utf-8") as f:
+        data_2025 = json.load(f)
+    data_2025["fetched_at"] = "2025-06-15T12:00:00+00:00"
+    with open(cache_file_2025, "w", encoding="utf-8") as f:
+        json.dump(data_2025, f)
+
+    cached_2025 = mgr.get("histuser", 2025, ttl_hours=4)
+    assert cached_2025 is None
+
