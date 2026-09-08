@@ -23,7 +23,9 @@ from contrigraph.utils.errors import (
     ConfigError,
     ConfigNotFoundError,
     ContrigraphError,
+    GitHubServerError,
     MissingTokenError,
+    NetworkError,
 )
 
 console = Console()
@@ -151,9 +153,19 @@ def _fetch_calendar(
 
     token = auth_mgr.get_token()
     client = GitHubClient(token=token)
-    calendar = client.fetch_contributions(username=username, year=year)
-    cache_mgr.set(calendar)
-    return calendar, False
+    try:
+        calendar = client.fetch_contributions(username=username, year=year)
+        cache_mgr.set(calendar)
+        return calendar, False
+    except (NetworkError, GitHubServerError) as err:
+        stale_cal = cache_mgr.get(username, year, ttl_hours=cache_ttl_hours, allow_stale=True)
+        if stale_cal is not None:
+            console.print(
+                f"[bold yellow]Warning:[/bold yellow] [dim]Unable to reach GitHub ({err.message}). "
+                "Displaying cached data.[/dim]\n"
+            )
+            return stale_cal, True
+        raise
 
 
 def cmd_show(args: argparse.Namespace) -> int:

@@ -28,6 +28,7 @@ class CacheManager:
         username: str,
         year: int | None = None,
         ttl_hours: int = 4,
+        allow_stale: bool = False,
     ) -> ContributionCalendar | None:
         """Retrieve cached ContributionCalendar if present and valid."""
         cache_file = self._get_cache_file(username, year)
@@ -52,7 +53,7 @@ class CacheManager:
             current_year = now.year
             is_past_year_completed = year is not None and year < current_year and fetched_at.year > year
 
-            if not is_past_year_completed:
+            if not is_past_year_completed and not allow_stale:
                 age_seconds = (now - fetched_at).total_seconds()
                 if age_seconds > (ttl_hours * 3600):
                     return None

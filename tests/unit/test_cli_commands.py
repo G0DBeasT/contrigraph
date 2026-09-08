@@ -101,6 +101,36 @@ def test_cli_error_presentation(mock_env, capsys):
         assert res == 1
 
 
+def test_cli_stale_cache_fallback_on_network_error(mock_env, capsys):
+    """Verify CLI falls back to stale cached data when network fails and displays warning."""
+    import json
+    from contrigraph.cache.manager import CacheManager
+    from contrigraph.data.normalizer import ContributionNormalizer
+
+    main(["setup", "--user", "offlineuser"])
+
+    # Seed cache with expired data
+    mgr = CacheManager()
+    payload = make_mock_calendar_payload("offlineuser", 99)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "offlineuser", None)
+    mgr.set(cal)
+
+    cache_file = mgr._get_cache_file("offlineuser", None)
+    with open(cache_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data["fetched_at"] = "2020-01-01T00:00:00+00:00"
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    # When network fails, show should fall back to stale cache and exit 0
+    with patch("contrigraph.api.client.GitHubClient._execute_graphql", side_effect=NetworkError("Connection refused")):
+        res = main(["show"])
+        assert res == 0
+        out, _ = capsys.readouterr()
+        assert "Displaying cached data" in out
+
+
+
 def test_doctor_failure_states(mock_env):
     """Verify doctor command reports issues gracefully when unauthenticated or unconfigured."""
     doc = Doctor()

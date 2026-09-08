@@ -105,3 +105,32 @@ def test_concurrent_cache_writes(temp_dir):
     assert cached.total_contributions == 300
 
 
+def test_cache_allow_stale(temp_dir):
+    """Verify expired cache returns None by default but returns calendar with allow_stale=True."""
+    import json
+    cache_dir = temp_dir / "cache"
+    mgr = CacheManager(cache_dir=cache_dir)
+    payload = make_mock_calendar_payload("staleuser", total_contributions=150)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "staleuser", 2026)
+
+    mgr.set(cal)
+    cache_file = mgr._get_cache_file("staleuser", 2026)
+    with open(cache_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Set timestamp to 24 hours ago
+    data["fetched_at"] = "2020-01-01T00:00:00+00:00"
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    # Standard get with 4h TTL should return None (expired)
+    assert mgr.get("staleuser", 2026, ttl_hours=4) is None
+    assert mgr.get("staleuser", 2026, ttl_hours=4, allow_stale=False) is None
+
+    # Stale get should successfully return the calendar
+    stale_cal = mgr.get("staleuser", 2026, ttl_hours=4, allow_stale=True)
+    assert stale_cal is not None
+    assert stale_cal.username == "staleuser"
+    assert stale_cal.total_contributions == 150
+
+
+
