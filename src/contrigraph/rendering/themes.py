@@ -1,5 +1,6 @@
 """Color palettes and symbol themes for terminal rendering."""
 
+import os
 from dataclasses import dataclass
 
 
@@ -69,6 +70,6 @@ def get_theme(name: str = "github-dark", no_color: bool = False, ascii_mode: boo
     """Resolve theme based on flags and preferences."""
     if ascii_mode:
         return THEMES["ascii"]
-    if no_color:
+    if no_color or "NO_COLOR" in os.environ or os.environ.get("TERM") == "dumb":
         return THEMES["monochrome"]
     return THEMES.get(name.lower(), THEMES["github-dark"])
