@@ -1,7 +1,7 @@
 """Statistics calculation engine for GitHub contribution calendars."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from contrigraph.models.calendar import ContributionCalendar, ContributionStats
 
@@ -20,7 +20,7 @@ class StatisticsEngine:
     ]
 
     @classmethod
-    def calculate(cls, calendar: ContributionCalendar) -> ContributionStats:
+    def calculate(cls, calendar: ContributionCalendar, as_of: date | None = None) -> ContributionStats:
         """Compute all activity statistics from ContributionCalendar."""
         days = calendar.all_days()
         total_days = len(days)
@@ -73,22 +73,50 @@ class StatisticsEngine:
                 except ValueError:
                     pass
 
-        # Calculate current streak ending at the end of the timeline
+        # Calculate current streak ending at today (or yesterday if today has 0 contributions)
         curr_streak = 0
-        now_year = datetime.now().year
+        target_today = as_of or datetime.now().date()
+        target_yesterday = target_today - timedelta(days=1)
+        today_str = target_today.strftime("%Y-%m-%d")
+        yesterday_str = target_yesterday.strftime("%Y-%m-%d")
+
+        now_year = target_today.year
         is_past_year = calendar.year is not None and calendar.year < now_year
 
         if not is_past_year and days:
-            check_days = list(reversed(days))
-            # If the last day (today) has 0 contributions, check if yesterday was active
-            if check_days[0].count == 0 and len(check_days) > 1:
-                check_days = check_days[1:]
-
-            for day in check_days:
-                if day.count > 0:
-                    curr_streak += 1
+            elapsed_days = [d for d in days if d.date and d.date <= today_str]
+            if elapsed_days:
+                last_elapsed = elapsed_days[-1]
+                if last_elapsed.date == today_str:
+                    if last_elapsed.count == 0 and len(elapsed_days) > 1:
+                        candidate_days = list(reversed(elapsed_days[:-1]))
+                        expected_dt = target_yesterday
+                    else:
+                        candidate_days = list(reversed(elapsed_days))
+                        expected_dt = target_today
+                elif last_elapsed.date == yesterday_str:
+                    candidate_days = list(reversed(elapsed_days))
+                    expected_dt = target_yesterday
                 else:
-                    break
+                    candidate_days = []
+                    expected_dt = None
+
+                for day in candidate_days:
+                    if not day.date:
+                        break
+                    try:
+                        day_dt = datetime.strptime(day.date, "%Y-%m-%d").date()
+                    except ValueError:
+                        break
+
+                    if day_dt != expected_dt:
+                        break
+
+                    if day.count > 0:
+                        curr_streak += 1
+                        expected_dt = expected_dt - timedelta(days=1)
+                    else:
+                        break
 
         current_streak = curr_streak
 

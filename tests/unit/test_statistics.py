@@ -1,4 +1,4 @@
-"""Unit tests for statistics and streak calculation engine."""
+from datetime import date
 
 from contrigraph.data.normalizer import ContributionNormalizer
 from contrigraph.models.calendar import ContributionCalendar, ContributionDay, ContributionWeek
@@ -24,7 +24,7 @@ def test_statistics_calculation():
 def test_streak_calculation_precise():
     """Verify streak detection on known pattern of active and inactive days."""
     # Day 1: 0, Day 2: 5, Day 3: 10, Day 4: 0, Day 5: 3, Day 6: 4, Day 7: 8
-    # Longest streak = 3 (days 5,6,7), Current streak = 3
+    # Longest streak = 3 (days 5,6,7), Current streak = 3 as of 2026-03-07
     days = [
         ContributionDay(date="2026-03-01", count=0, level=0, weekday=0),
         ContributionDay(date="2026-03-02", count=5, level=2, weekday=1),
@@ -43,7 +43,7 @@ def test_streak_calculation_precise():
         weeks=[ContributionWeek(days=days)],
     )
 
-    stats = StatisticsEngine.calculate(cal)
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 3, 7))
     assert stats.total_contributions == 30
     assert stats.active_days == 5
     assert stats.total_days == 7
@@ -86,7 +86,7 @@ def test_current_streak_inactive_today_preserves_streak():
         total_contributions=8,
         weeks=[ContributionWeek(days=days)],
     )
-    stats = StatisticsEngine.calculate(cal)
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 9, 7))
     assert stats.current_streak == 2
     assert stats.longest_streak == 2
 
@@ -107,7 +107,7 @@ def test_current_streak_multiple_inactive_days_resets():
         total_contributions=7,
         weeks=[ContributionWeek(days=days)],
     )
-    stats = StatisticsEngine.calculate(cal)
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 9, 7))
     assert stats.current_streak == 0
     assert stats.longest_streak == 2
 
@@ -127,7 +127,46 @@ def test_current_streak_past_year_returns_zero():
         total_contributions=10,
         weeks=[ContributionWeek(days=days)],
     )
-    stats = StatisticsEngine.calculate(cal)
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 9, 8))
     assert stats.current_streak == 0
     assert stats.longest_streak == 3
+
+
+def test_current_streak_with_future_dates_in_dataset():
+    """Regression test for Issue #1: Active streak is calculated correctly even when dataset extends into future dates."""
+    # Active from Sept 1 to Sept 8 (today), followed by future zero days up to Dec 31
+    days = [ContributionDay(date=f"2026-09-0{i}", count=5, level=2, weekday=i % 7) for i in range(1, 9)]
+    days += [ContributionDay(date=f"2026-09-{i:02d}", count=0, level=0, weekday=i % 7) for i in range(9, 31)]
+    days += [ContributionDay(date=f"2026-10-{i:02d}", count=0, level=0, weekday=i % 7) for i in range(1, 32)]
+    days += [ContributionDay(date=f"2026-11-{i:02d}", count=0, level=0, weekday=i % 7) for i in range(1, 31)]
+    days += [ContributionDay(date=f"2026-12-{i:02d}", count=0, level=0, weekday=i % 7) for i in range(1, 32)]
+
+    cal = ContributionCalendar(
+        username="activeuser",
+        year=2026,
+        from_date="2026-09-01",
+        to_date="2026-12-31",
+        total_contributions=40,
+        weeks=[ContributionWeek(days=days)],
+    )
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 9, 8))
+    assert stats.current_streak == 8
+    assert stats.longest_streak == 8
+
+
+def test_current_streak_historical_date_range_returns_zero():
+    """Verify sub-ranges ending before yesterday return current_streak == 0."""
+    days = [ContributionDay(date=f"2026-01-{i:02d}", count=3, level=2, weekday=i % 7) for i in range(1, 15)]
+    cal = ContributionCalendar(
+        username="histrange",
+        year=2026,
+        from_date="2026-01-01",
+        to_date="2026-01-14",
+        total_contributions=42,
+        weeks=[ContributionWeek(days=days)],
+    )
+    # Today is Sept 8, 2026 -> historical range in January must report current_streak == 0
+    stats = StatisticsEngine.calculate(cal, as_of=date(2026, 9, 8))
+    assert stats.current_streak == 0
+    assert stats.longest_streak == 14
 
