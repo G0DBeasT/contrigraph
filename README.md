@@ -38,14 +38,14 @@ Fri  ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■
 
 ## Features
 
-- 🟢 **High-Fidelity GitHub Graph**: Authentic 5-tier density calculation matching GitHub's official quartiles.
-- ⚡ **Blazing Fast Local Cache**: Warm renders execute in < 20ms using structured XDG JSON storage.
-- 📊 **Comprehensive Activity Insights**: Current streak, longest streak, active days, weekday activity distributions, and commit/PR/issue breakdowns.
-- 🎨 **Multiple Color Themes**: `github-dark` (TrueColor green), `github-light`, `emerald`, `halloween` (pumpkin orange), `unicode-blocks` (`░▒▓█`), `ascii` (`.oO#@`), and `monochrome`.
-- 📐 **Responsive Terminal Layout**: Automatically detects terminal width and splits into clean half-year segments (Jan–Jun, Jul–Dec) on terminals narrower than 110 columns to prevent line-wrapping artifacts.
-- 🔒 **Secure Token Storage**: Authentication tokens are isolated in `$XDG_CONFIG_HOME/contrigraph/auth.json` with strict POSIX permissions (`0600`).
-- 🩺 **Built-in Doctor Diagnostic**: Run `ghcontrib doctor` to inspect Python runtime, token health, API rate limits, terminal color support, and cache status.
-- 📦 **Zero-Config CLI Aliases**: Use `ghcontrib`, `contrigraph`, or `github-contrib`.
+- **High-Fidelity GitHub Graph**: Authentic 5-tier density calculation matching GitHub's official quartiles.
+- **Blazing Fast Local Cache**: Warm renders execute in < 20ms using structured XDG JSON storage.
+- **Comprehensive Activity Insights**: Current streak, longest streak, active days, weekday activity distributions, and commit/PR/issue breakdowns.
+- **Multiple Color Themes**: `github-dark` (TrueColor green), `github-light`, `emerald`, `halloween` (pumpkin orange), `unicode-blocks` (`░▒▓█`), `ascii` (`.oO#@`), and `monochrome`.
+- **Responsive Terminal Layout**: Automatically detects terminal width and splits into clean half-year segments (Jan–Jun, Jul–Dec) on terminals narrower than 110 columns to prevent line-wrapping artifacts.
+- **Secure Token Storage**: Authentication tokens are isolated in `$XDG_CONFIG_HOME/contrigraph/auth.json` with strict POSIX permissions (`0600`).
+- **Built-in Doctor Diagnostic**: Run `ghcontrib doctor` to inspect Python runtime, token health, API rate limits, terminal color support, and cache status.
+- **Zero-Config CLI Aliases**: Use `ghcontrib`, `contrigraph`, or `github-contrib`.
 
 ---
 
