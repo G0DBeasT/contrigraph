@@ -20,11 +20,8 @@ from contrigraph.rendering.themes import THEMES
 from contrigraph.statistics.engine import StatisticsEngine
 from contrigraph.utils.errors import (
     AuthError,
-    ConfigError,
-    ConfigNotFoundError,
     ContrigraphError,
     GitHubServerError,
-    MissingTokenError,
     NetworkError,
 )
 

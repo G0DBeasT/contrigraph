@@ -6,7 +6,6 @@ import pytest
 from contrigraph.api.client import GitHubClient
 from contrigraph.utils.errors import (
     InvalidTokenError,
-    RateLimitExceededError,
     UserNotFoundError,
 )
 from tests.fixtures.mock_data import make_mock_calendar_payload, make_mock_rate_limit_payload

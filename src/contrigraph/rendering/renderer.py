@@ -3,15 +3,13 @@
 import csv
 import io
 import json
-import sys
-from typing import TextIO
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from contrigraph.models.calendar import ContributionCalendar, ContributionStats, ContributionWeek
+from contrigraph.models.calendar import ContributionCalendar, ContributionStats
 from contrigraph.rendering.themes import ColorTheme, get_theme
 from contrigraph.statistics.engine import StatisticsEngine
 from contrigraph.utils.platform import get_terminal_width

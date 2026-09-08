@@ -1,7 +1,6 @@
 """Integration test for complete CLI workflow (setup, auth, show, stats, doctor, refresh)."""
 
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
 from contrigraph.cli.main import main
 from tests.fixtures.mock_data import make_mock_calendar_payload, make_mock_rate_limit_payload

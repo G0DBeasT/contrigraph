@@ -1,6 +1,5 @@
 """Doctor command to diagnose environment, auth, network, and terminal health."""
 
-import os
 import sys
 from rich.console import Console
 from rich.panel import Panel

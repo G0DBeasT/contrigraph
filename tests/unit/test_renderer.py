@@ -5,7 +5,7 @@ from rich.console import Console
 
 from contrigraph.data.normalizer import ContributionNormalizer
 from contrigraph.rendering.renderer import CalendarRenderer
-from contrigraph.rendering.themes import THEMES, get_theme
+from contrigraph.rendering.themes import get_theme
 from tests.fixtures.mock_data import make_mock_calendar_payload
 
 

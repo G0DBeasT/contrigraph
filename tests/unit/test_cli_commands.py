@@ -1,20 +1,15 @@
 """Unit tests covering all CLI command switches and error handling branches."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 
 from contrigraph.cli.doctor import Doctor
 from contrigraph.cli.main import build_parser, main
 from contrigraph.utils.errors import (
-    APIError,
-    AuthError,
-    ConfigError,
-    ContrigraphError,
     NetworkError,
-    RateLimitExceededError,
     UserNotFoundError,
 )
-from tests.fixtures.mock_data import make_mock_calendar_payload, make_mock_rate_limit_payload
+from tests.fixtures.mock_data import make_mock_calendar_payload
 
 
 def test_cli_parser_help():
