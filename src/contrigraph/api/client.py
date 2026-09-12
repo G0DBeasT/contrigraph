@@ -85,6 +85,33 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
+    @staticmethod
+    def _safe_reset_time(headers: "httpx.Headers") -> str | None:
+        """Safely parse x-ratelimit-reset or Retry-After into a human-readable string.
+
+        Returns None when the header is absent or cannot be interpreted.
+        """
+        # Prefer x-ratelimit-reset (Unix timestamp)
+        reset_header = headers.get("x-ratelimit-reset")
+        if reset_header is not None:
+            try:
+                ts = int(reset_header.strip())
+                return time.ctime(ts)
+            except (ValueError, TypeError, OSError, OverflowError):
+                pass
+
+        # Fall back to Retry-After (seconds or HTTP-date)
+        retry_after = headers.get("retry-after")
+        if retry_after is not None:
+            try:
+                seconds = int(retry_after.strip())
+                return time.ctime(time.time() + seconds)
+            except (ValueError, TypeError, OSError, OverflowError):
+                # It's an HTTP-date string – return it verbatim
+                return retry_after.strip() or None
+
+        return None
+
     def _execute_graphql(
         self,
         query: str,
@@ -111,10 +138,13 @@ class GitHubClient:
 
                 if response.status_code == 403:
                     if "rate limit" in response.text.lower():
-                        reset_header = response.headers.get("x-ratelimit-reset")
-                        reset_str = time.ctime(int(reset_header)) if reset_header else None
+                        reset_str = self._safe_reset_time(response.headers)
                         raise RateLimitExceededError(reset_time=reset_str)
                     raise InvalidTokenError("Access forbidden (403). Verify token permissions.")
+
+                if response.status_code == 429:
+                    reset_str = self._safe_reset_time(response.headers)
+                    raise RateLimitExceededError(reset_time=reset_str)
 
                 if response.status_code in (500, 502, 503, 504):
                     if attempt < self.MAX_RETRIES:

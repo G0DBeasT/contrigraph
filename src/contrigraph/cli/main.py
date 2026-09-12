@@ -23,6 +23,7 @@ from contrigraph.utils.errors import (
     ContrigraphError,
     GitHubServerError,
     NetworkError,
+    RateLimitExceededError,
 )
 
 console = Console()
@@ -154,7 +155,7 @@ def _fetch_calendar(
         calendar = client.fetch_contributions(username=username, year=year)
         cache_mgr.set(calendar)
         return calendar, False
-    except (NetworkError, GitHubServerError) as err:
+    except (NetworkError, GitHubServerError, RateLimitExceededError) as err:
         stale_cal = cache_mgr.get(username, year, ttl_hours=cache_ttl_hours, allow_stale=True)
         if stale_cal is not None:
             console.print(
