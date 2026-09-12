@@ -112,3 +112,11 @@ def test_renderer_formats_json_and_csv(capsys):
     renderer.render(calendar=cal, output_format="csv")
     out_csv, _ = capsys.readouterr()
     assert "date,weekday,count,level" in out_csv
+
+
+def test_calendar_renderer_type_hints():
+    """Verify runtime type hints can be evaluated without NameError."""
+    import typing
+    hints = typing.get_type_hints(CalendarRenderer._render_matrix_block)
+    assert "weeks" in hints
+    assert hints["return"] is type(None)
