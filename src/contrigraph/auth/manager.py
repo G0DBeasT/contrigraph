@@ -76,11 +76,21 @@ class AuthManager:
         return f"{token[:4]}...{token[-4:]}"
 
     def get_token(self) -> str | None:
-        """Resolve token from environment, stored file, or GitHub CLI."""
-        # 1. Check GITHUB_TOKEN or GH_TOKEN environment variables
-        env_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if env_token and env_token.strip():
-            return env_token.strip()
+        """Resolve token from environment, stored file, or GitHub CLI.
+
+        Precedence (highest first):
+        1. GH_TOKEN environment variable (GitHub CLI standard)
+        2. GITHUB_TOKEN environment variable
+        3. Stored auth.json file
+        4. GitHub CLI (gh auth token)
+        """
+        # 1. Environment variables — strip each independently before combining
+        #    to avoid whitespace-only values masking a valid sibling variable.
+        gh_token = (os.environ.get("GH_TOKEN") or "").strip()
+        github_token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+        env_token = gh_token or github_token
+        if env_token:
+            return env_token
 
         # 2. Check stored auth.json file
         if self.auth_path.exists():
@@ -94,9 +104,9 @@ class AuthManager:
                 pass
 
         # 3. Check GitHub CLI (gh) if available
-        gh_token = self._get_gh_cli_token()
-        if gh_token:
-            return gh_token
+        gh_cli_token = self._get_gh_cli_token()
+        if gh_cli_token:
+            return gh_cli_token
 
         return None
 
@@ -195,23 +205,33 @@ class AuthManager:
             self.auth_path.unlink()
 
     def get_auth_status(self) -> AuthStatus:
-        """Provide detailed status of current authentication configuration."""
-        if os.environ.get("GITHUB_TOKEN"):
-            token = os.environ["GITHUB_TOKEN"].strip()
-            return AuthStatus(
-                is_authenticated=True,
-                source="env:GITHUB_TOKEN",
-                masked_token=self.mask_token(token),
-                message="Authenticated via GITHUB_TOKEN environment variable",
-            )
-        if os.environ.get("GH_TOKEN"):
-            token = os.environ["GH_TOKEN"].strip()
+        """Provide detailed status of current authentication configuration.
+
+        Precedence mirrors get_token():
+        1. GH_TOKEN  (GitHub CLI standard — highest priority)
+        2. GITHUB_TOKEN
+        3. Stored auth.json file
+        4. GitHub CLI (gh auth token)
+        """
+        # 1. Environment variables — strip each independently
+        gh_token = (os.environ.get("GH_TOKEN") or "").strip()
+        if gh_token:
             return AuthStatus(
                 is_authenticated=True,
                 source="env:GH_TOKEN",
-                masked_token=self.mask_token(token),
+                masked_token=self.mask_token(gh_token),
                 message="Authenticated via GH_TOKEN environment variable",
             )
+        github_token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+        if github_token:
+            return AuthStatus(
+                is_authenticated=True,
+                source="env:GITHUB_TOKEN",
+                masked_token=self.mask_token(github_token),
+                message="Authenticated via GITHUB_TOKEN environment variable",
+            )
+
+        # 2. Stored credentials file
         if self.auth_path.exists():
             try:
                 with open(self.auth_path, "r", encoding="utf-8") as f:
@@ -228,12 +248,13 @@ class AuthManager:
             except Exception:
                 pass
 
-        gh_token = self._get_gh_cli_token()
-        if gh_token:
+        # 3. GitHub CLI
+        gh_cli_token = self._get_gh_cli_token()
+        if gh_cli_token:
             return AuthStatus(
                 is_authenticated=True,
                 source="cli:gh",
-                masked_token=self.mask_token(gh_token),
+                masked_token=self.mask_token(gh_cli_token),
                 message="Authenticated via GitHub CLI (gh auth token)",
             )
 
