@@ -102,7 +102,10 @@ def supports_color() -> bool:
 def supports_truecolor() -> bool:
     """Check if terminal supports 24-bit TrueColor."""
     colorterm = os.environ.get("COLORTERM", "").lower()
-    return colorterm in ("truecolor", "24bit") or "xterm-256color" in os.environ.get("TERM", "").lower()
+    if colorterm in ("truecolor", "24bit"):
+        return True
+    term = os.environ.get("TERM", "").lower()
+    return term.endswith("-direct")
 
 
 def supports_unicode() -> bool:

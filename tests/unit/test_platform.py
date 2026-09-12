@@ -80,3 +80,39 @@ def test_terminal_detection(monkeypatch):
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("COLORTERM", "truecolor")
     assert supports_truecolor()
+
+
+def test_supports_truecolor(monkeypatch):
+    """Verify distinction between 256-color and 24-bit TrueColor."""
+    # When COLORTERM is truecolor or 24bit, TrueColor is supported
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    monkeypatch.delenv("TERM", raising=False)
+    assert supports_truecolor()
+
+    monkeypatch.setenv("COLORTERM", "24bit")
+    assert supports_truecolor()
+
+    monkeypatch.setenv("COLORTERM", "TrueColor")
+    assert supports_truecolor()
+
+    # When COLORTERM is unset, xterm-256color must NOT be treated as TrueColor
+    monkeypatch.delenv("COLORTERM", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert not supports_truecolor()
+
+    # Direct-color terminals ending with -direct support TrueColor
+    monkeypatch.setenv("TERM", "xterm-direct")
+    assert supports_truecolor()
+
+    monkeypatch.setenv("TERM", "alacritty-direct")
+    assert supports_truecolor()
+
+    # Standard terminals without COLORTERM do not support TrueColor
+    monkeypatch.setenv("TERM", "xterm")
+    assert not supports_truecolor()
+
+    monkeypatch.setenv("TERM", "screen")
+    assert not supports_truecolor()
+
+    monkeypatch.delenv("TERM", raising=False)
+    assert not supports_truecolor()
