@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 
-from contrigraph.utils.platform import supports_unicode
+from contrigraph.utils.platform import TerminalCapabilities, supports_unicode
 
 
 @dataclass(frozen=True)
@@ -68,10 +68,16 @@ THEMES: dict[str, ColorTheme] = {
 }
 
 
-def get_theme(name: str = "github-dark", no_color: bool = False, ascii_mode: bool = False) -> ColorTheme:
-    """Resolve theme based on flags and preferences."""
-    if ascii_mode or not supports_unicode() or os.environ.get("TERM") == "dumb":
+def get_theme(
+    name: str = "github-dark",
+    no_color: bool = False,
+    ascii_mode: bool = False,
+    capabilities: TerminalCapabilities | None = None,
+) -> ColorTheme:
+    """Resolve theme based on flags, preferences, and terminal capabilities."""
+    caps = capabilities or TerminalCapabilities.detect()
+    if ascii_mode or not caps.supports_unicode or not supports_unicode() or os.environ.get("TERM") == "dumb":
         return THEMES["ascii"]
-    if no_color or "NO_COLOR" in os.environ:
+    if no_color or "NO_COLOR" in os.environ or not caps.supports_color:
         return THEMES["monochrome"]
     return THEMES.get(name.lower(), THEMES["github-dark"])

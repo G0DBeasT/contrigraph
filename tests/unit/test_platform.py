@@ -6,6 +6,7 @@ from pathlib import Path
 
 from contrigraph.utils.platform import (
     PlatformPaths,
+    TerminalCapabilities,
     get_terminal_width,
     set_secure_file_permissions,
     supports_color,
@@ -116,3 +117,153 @@ def test_supports_truecolor(monkeypatch):
 
     monkeypatch.delenv("TERM", raising=False)
     assert not supports_truecolor()
+
+
+# ---------------------------------------------------------------------------
+# TerminalCapabilities centralized abstraction (#5)
+# ---------------------------------------------------------------------------
+
+def test_terminal_capabilities_properties():
+    """Verify helper properties of TerminalCapabilities."""
+    from rich import box
+
+    # Unicode + TrueColor + TTY
+    caps = TerminalCapabilities(
+        width=80,
+        height=24,
+        is_tty=True,
+        supports_unicode=True,
+        color_depth="truecolor",
+    )
+    assert caps.supports_color is True
+    assert caps.supports_truecolor is True
+    assert caps.supports_256color is True
+    assert caps.bullet_char == "•"
+    assert caps.arrow_char == "→"
+    assert caps.box_style == box.ROUNDED
+    assert caps.max_weeks_per_chunk == 37
+    assert caps.get_max_weeks_per_chunk(label_width=4, safety_padding=2) == 37
+
+    # Non-Unicode + monochrome
+    caps_ascii = TerminalCapabilities(
+        width=40,
+        height=10,
+        is_tty=True,
+        supports_unicode=False,
+        color_depth="none",
+    )
+    assert caps_ascii.supports_color is False
+    assert caps_ascii.supports_truecolor is False
+    assert caps_ascii.supports_256color is False
+    assert caps_ascii.bullet_char == "*"
+    assert caps_ascii.arrow_char == "->"
+    assert caps_ascii.box_style == box.ASCII
+    assert caps_ascii.max_weeks_per_chunk == 17
+
+
+def test_terminal_capabilities_piped_output_downgrade():
+    """Piped/redirected output (is_tty=False) disables color by default."""
+    caps = TerminalCapabilities(
+        width=80,
+        height=24,
+        is_tty=False,
+        supports_unicode=True,
+        color_depth="truecolor",
+    )
+    assert caps.is_tty is False
+    assert caps.supports_color is False
+    assert caps.supports_truecolor is True  # Environment itself is TrueColor capable
+
+
+def test_terminal_capabilities_detect_color_depth(monkeypatch):
+    """Test environment-based color_depth detection with mocked stream."""
+    class MockStream:
+        def __init__(self, tty=True, encoding="utf-8"):
+            self._tty = tty
+            self.encoding = encoding
+
+        def isatty(self):
+            return self._tty
+
+    stream = MockStream(tty=True)
+
+    # COLORTERM=truecolor -> truecolor
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    monkeypatch.setenv("TERM", "xterm")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "truecolor"
+    assert caps.supports_truecolor is True
+    assert caps.supports_color is True
+
+    # COLORTERM unset, TERM=xterm-256color -> 256
+    monkeypatch.delenv("COLORTERM", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "256"
+    assert caps.supports_truecolor is False
+    assert caps.supports_256color is True
+    assert caps.supports_color is True
+
+    # TERM ending in -direct -> truecolor
+    monkeypatch.setenv("TERM", "xterm-direct")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "truecolor"
+    assert caps.supports_truecolor is True
+
+    # TERM=vt100 -> standard
+    monkeypatch.setenv("TERM", "vt100")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "standard"
+    assert caps.supports_color is True
+    assert caps.supports_256color is False
+
+    # TERM=dumb -> none
+    monkeypatch.setenv("TERM", "dumb")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "none"
+    assert caps.supports_color is False
+
+    # NO_COLOR=1 -> none regardless of TERM or COLORTERM
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    caps = TerminalCapabilities.detect(stream=stream)
+    assert caps.color_depth == "none"
+    assert caps.supports_color is False
+
+
+def test_terminal_capabilities_detect_encoding():
+    """Test detection of UTF-8 vs non-UTF-8 stream encoding."""
+    class MockStream:
+        def __init__(self, encoding):
+            self.encoding = encoding
+
+        def isatty(self):
+            return True
+
+    utf_stream = MockStream("UTF-8")
+    assert TerminalCapabilities.detect(stream=utf_stream).supports_unicode is True
+
+    ascii_stream = MockStream("ascii")
+    assert TerminalCapabilities.detect(stream=ascii_stream).supports_unicode is False
+
+    latin1_stream = MockStream("ISO-8859-1")
+    assert TerminalCapabilities.detect(stream=latin1_stream).supports_unicode is False
+
+
+def test_terminal_capabilities_create_console():
+    """Verify create_console builds a Rich Console configured to match capabilities."""
+    caps_tc = TerminalCapabilities(width=100, height=30, is_tty=True, color_depth="truecolor")
+    console_tc = caps_tc.create_console()
+    assert console_tc.width == 100
+    assert console_tc.height == 30
+    assert console_tc.color_system == "truecolor"
+
+    caps_256 = TerminalCapabilities(width=80, height=24, is_tty=True, color_depth="256")
+    console_256 = caps_256.create_console()
+    assert console_256.color_system == "256"
+
+    caps_none = TerminalCapabilities(width=80, height=24, is_tty=False, color_depth="none")
+    console_none = caps_none.create_console()
+    assert console_none.color_system is None

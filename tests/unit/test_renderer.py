@@ -1,6 +1,7 @@
 """Unit tests for terminal renderer and themes."""
 
 import io
+import sys
 from rich.console import Console
 
 from contrigraph.data.normalizer import ContributionNormalizer
@@ -13,6 +14,7 @@ def test_theme_resolution(monkeypatch):
     """Verify theme fallback and selection."""
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
 
     t_dark = get_theme("github-dark")
     assert t_dark.name == "github-dark"
@@ -38,6 +40,11 @@ def test_theme_resolution(monkeypatch):
     # Test non-UTF-8 environment fallback
     monkeypatch.setattr("contrigraph.rendering.themes.supports_unicode", lambda: False)
     assert get_theme("github-dark").name == "ascii"
+    monkeypatch.setattr("contrigraph.rendering.themes.supports_unicode", lambda: True)
+
+    # Test piped / non-TTY output fallback (isatty == False)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    assert get_theme("github-dark").name == "monochrome"
 
 
 def test_renderer_no_color_environment(monkeypatch):

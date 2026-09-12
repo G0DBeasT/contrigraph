@@ -25,8 +25,10 @@ from contrigraph.utils.errors import (
     NetworkError,
     RateLimitExceededError,
 )
+from contrigraph.utils.platform import TerminalCapabilities
 
-console = Console()
+capabilities = TerminalCapabilities.detect()
+console = capabilities.create_console()
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
@@ -196,7 +198,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         cache_ttl_hours=cfg.cache_ttl_hours if cfg else 4,
     )
 
-    renderer = CalendarRenderer(console=console)
+    renderer = CalendarRenderer(console=console, capabilities=capabilities)
     renderer.render(
         calendar=calendar,
         theme_name=theme,
@@ -227,7 +229,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     )
 
     stats = StatisticsEngine.calculate(calendar)
-    renderer = CalendarRenderer(console=console)
+    renderer = CalendarRenderer(console=console, capabilities=capabilities)
     renderer._render_header(calendar, stats, None)
     renderer._render_stats_card(stats)
     return 0

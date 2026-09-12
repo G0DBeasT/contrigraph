@@ -20,7 +20,7 @@ from contrigraph.models.calendar import (
 )
 from contrigraph.rendering.themes import THEMES, ColorTheme, get_theme
 from contrigraph.statistics.engine import StatisticsEngine
-from contrigraph.utils.platform import get_terminal_width, supports_unicode
+from contrigraph.utils.platform import TerminalCapabilities, get_terminal_width, supports_unicode
 
 
 class CalendarRenderer:
@@ -29,8 +29,20 @@ class CalendarRenderer:
     # Weekday display labels (0=Sunday, 1=Monday, ..., 6=Saturday)
     ROW_LABELS = ["   ", "Mon", "   ", "Wed", "   ", "Fri", "   "]
 
-    def __init__(self, console: Console | None = None) -> None:
-        self.console = console or Console()
+    def __init__(
+        self,
+        console: Console | None = None,
+        capabilities: TerminalCapabilities | None = None,
+    ) -> None:
+        if capabilities is not None:
+            self.capabilities = capabilities
+            self.console = console or capabilities.create_console()
+        elif console is not None:
+            self.console = console
+            self.capabilities = TerminalCapabilities.detect(console=console)
+        else:
+            self.capabilities = TerminalCapabilities.detect()
+            self.console = self.capabilities.create_console()
 
     def _is_unicode_supported(self, theme: ColorTheme | None = None, ascii_mode: bool = False) -> bool:
         """Check if Unicode rendering is supported by terminal, encoding, and theme."""
@@ -38,12 +50,7 @@ class CalendarRenderer:
             return False
         if theme and theme.is_ascii:
             return False
-        if not supports_unicode():
-            return False
-        if self.console and getattr(self.console, "encoding", None):
-            if "utf" not in self.console.encoding.lower():
-                return False
-        return True
+        return self.capabilities.supports_unicode
 
     def render(
         self,
@@ -68,8 +75,9 @@ class CalendarRenderer:
             self._render_csv(calendar)
             return
 
-        theme = get_theme(theme_name, no_color=no_color, ascii_mode=ascii_mode)
-        term_width = self.console.width if (self.console and self.console.width) else get_terminal_width()
+        caps = self.capabilities
+        theme = get_theme(theme_name, no_color=no_color, ascii_mode=ascii_mode, capabilities=caps)
+        term_width = self.console.width if (self.console and self.console.width) else caps.width
         is_unicode = self._is_unicode_supported(theme=theme, ascii_mode=ascii_mode)
         if not is_unicode and not theme.is_ascii:
             theme = THEMES["ascii"]
@@ -88,8 +96,7 @@ class CalendarRenderer:
             if required_full_width <= term_width:
                 chunks = [(0, total_weeks)]
             else:
-                usable_cols = max(label_width + 2, term_width - safety_padding)
-                max_weeks_per_chunk = max(1, (usable_cols - label_width) // 2)
+                max_weeks_per_chunk = caps.get_max_weeks_per_chunk(label_width, safety_padding)
                 num_chunks = max(2, math.ceil(total_weeks / max_weeks_per_chunk))
 
                 base_size = total_weeks // num_chunks
@@ -104,7 +111,7 @@ class CalendarRenderer:
             if len(chunks) == 1:
                 self._render_matrix_block(calendar.weeks, calendar.months, 0, theme)
             else:
-                arrow = "→" if is_unicode else "->"
+                arrow = caps.arrow_char if is_unicode else "->"
                 for idx, (start_idx, end_idx) in enumerate(chunks):
                     start_date = None
                     for d in calendar.weeks[start_idx].days:
@@ -146,7 +153,7 @@ class CalendarRenderer:
         if is_unicode is None:
             is_unicode = self._is_unicode_supported(theme=theme)
 
-        bullet = "•" if is_unicode else "*"
+        bullet = self.capabilities.bullet_char if is_unicode else "*"
         period_str = str(calendar.year) if calendar.year else f"{calendar.from_date} to {calendar.to_date}"
         title = f"[bold white]GitHub Contributions[/bold white] [dim]{bullet}[/dim] [bold cyan]@{calendar.username}[/bold cyan] [dim]({period_str})[/dim]"
 
@@ -155,7 +162,7 @@ class CalendarRenderer:
             f"([bold yellow]{stats.current_streak}[/bold yellow] day current streak, "
             f"[bold magenta]{stats.longest_streak}[/bold magenta] day longest streak)"
         )
-        panel_box = box.ROUNDED if is_unicode else box.ASCII
+        panel_box = self.capabilities.box_style if is_unicode else box.ASCII
         self.console.print(Panel(summary_text, title=title, border_style="cyan", expand=False, box=panel_box))
 
     def _render_matrix_block(

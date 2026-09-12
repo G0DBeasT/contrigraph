@@ -10,6 +10,7 @@ from contrigraph.auth.manager import AuthManager
 from contrigraph.config.manager import ConfigManager
 from contrigraph.utils.platform import (
     PlatformPaths,
+    TerminalCapabilities,
     get_terminal_width,
     supports_color,
     supports_truecolor,
@@ -86,12 +87,12 @@ class Doctor:
             table.add_row("GitHub GraphQL API", "[dim]SKIPPED[/dim]", "Requires token to test GraphQL rate limit")
 
         # 6. Terminal Color & Unicode Support
-        width = get_terminal_width()
-        color_ok = supports_color()
-        truecolor_ok = supports_truecolor()
-        unicode_ok = supports_unicode()
-
-        term_details = f"Width: {width} cols | Color: {'Yes' if color_ok else 'No'} | TrueColor: {'Yes' if truecolor_ok else 'No'} | UTF-8: {'Yes' if unicode_ok else 'No'}"
+        caps = TerminalCapabilities.detect(console=self.console)
+        term_details = (
+            f"Width: {caps.width} cols | Color: {'Yes' if caps.supports_color else 'No'} | "
+            f"TrueColor: {'Yes' if caps.supports_truecolor else 'No'} | "
+            f"UTF-8: {'Yes' if caps.supports_unicode else 'No'}"
+        )
         table.add_row("Terminal Display", "[green]✓ OK[/green]", term_details)
 
         # 7. Cache Directory
