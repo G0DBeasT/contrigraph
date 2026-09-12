@@ -7,6 +7,7 @@ import io
 import json
 import math
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -17,9 +18,9 @@ from contrigraph.models.calendar import (
     ContributionStats,
     ContributionWeek,
 )
-from contrigraph.rendering.themes import ColorTheme, get_theme
+from contrigraph.rendering.themes import THEMES, ColorTheme, get_theme
 from contrigraph.statistics.engine import StatisticsEngine
-from contrigraph.utils.platform import get_terminal_width
+from contrigraph.utils.platform import get_terminal_width, supports_unicode
 
 
 class CalendarRenderer:
@@ -30,6 +31,19 @@ class CalendarRenderer:
 
     def __init__(self, console: Console | None = None) -> None:
         self.console = console or Console()
+
+    def _is_unicode_supported(self, theme: ColorTheme | None = None, ascii_mode: bool = False) -> bool:
+        """Check if Unicode rendering is supported by terminal, encoding, and theme."""
+        if ascii_mode:
+            return False
+        if theme and theme.is_ascii:
+            return False
+        if not supports_unicode():
+            return False
+        if self.console and getattr(self.console, "encoding", None):
+            if "utf" not in self.console.encoding.lower():
+                return False
+        return True
 
     def render(
         self,
@@ -56,10 +70,13 @@ class CalendarRenderer:
 
         theme = get_theme(theme_name, no_color=no_color, ascii_mode=ascii_mode)
         term_width = self.console.width if (self.console and self.console.width) else get_terminal_width()
+        is_unicode = self._is_unicode_supported(theme=theme, ascii_mode=ascii_mode)
+        if not is_unicode and not theme.is_ascii:
+            theme = THEMES["ascii"]
 
         # Render Header Info
         if not compact:
-            self._render_header(calendar, stats, theme)
+            self._render_header(calendar, stats, theme, is_unicode=is_unicode)
 
         # Dynamic terminal-width chunking
         total_weeks = len(calendar.weeks)
@@ -87,6 +104,7 @@ class CalendarRenderer:
             if len(chunks) == 1:
                 self._render_matrix_block(calendar.weeks, calendar.months, 0, theme)
             else:
+                arrow = "→" if is_unicode else "->"
                 for idx, (start_idx, end_idx) in enumerate(chunks):
                     start_date = None
                     for d in calendar.weeks[start_idx].days:
@@ -99,7 +117,7 @@ class CalendarRenderer:
                             end_date = d.date
                             break
 
-                    date_str = f" ({start_date} → {end_date})" if (start_date and end_date) else ""
+                    date_str = f" ({start_date} {arrow} {end_date})" if (start_date and end_date) else ""
 
                     if len(chunks) == 2:
                         period_name = "Early Period" if idx == 0 else "Later Period"
@@ -121,18 +139,24 @@ class CalendarRenderer:
         self,
         calendar: ContributionCalendar,
         stats: ContributionStats,
-        theme: ColorTheme,
+        theme: ColorTheme | None = None,
+        is_unicode: bool | None = None,
     ) -> None:
         """Render header panel with username and key totals."""
+        if is_unicode is None:
+            is_unicode = self._is_unicode_supported(theme=theme)
+
+        bullet = "•" if is_unicode else "*"
         period_str = str(calendar.year) if calendar.year else f"{calendar.from_date} to {calendar.to_date}"
-        title = f"[bold white]GitHub Contributions[/bold white] [dim]•[/dim] [bold cyan]@{calendar.username}[/bold cyan] [dim]({period_str})[/dim]"
+        title = f"[bold white]GitHub Contributions[/bold white] [dim]{bullet}[/dim] [bold cyan]@{calendar.username}[/bold cyan] [dim]({period_str})[/dim]"
 
         summary_text = (
             f"[bold green]{stats.total_contributions:,}[/bold green] contributions in this period "
             f"([bold yellow]{stats.current_streak}[/bold yellow] day current streak, "
             f"[bold magenta]{stats.longest_streak}[/bold magenta] day longest streak)"
         )
-        self.console.print(Panel(summary_text, title=title, border_style="cyan", expand=False))
+        panel_box = box.ROUNDED if is_unicode else box.ASCII
+        self.console.print(Panel(summary_text, title=title, border_style="cyan", expand=False, box=panel_box))
 
     def _render_matrix_block(
         self,

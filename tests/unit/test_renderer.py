@@ -32,13 +32,18 @@ def test_theme_resolution(monkeypatch):
 
     # Test TERM=dumb environment variable
     monkeypatch.setenv("TERM", "dumb")
-    assert get_theme("github-dark").name == "monochrome"
+    assert get_theme("github-dark").name == "ascii"
     monkeypatch.delenv("TERM", raising=False)
+
+    # Test non-UTF-8 environment fallback
+    monkeypatch.setattr("contrigraph.rendering.themes.supports_unicode", lambda: False)
+    assert get_theme("github-dark").name == "ascii"
 
 
 def test_renderer_no_color_environment(monkeypatch):
     """Verify renderer uses monochrome symbol gradation when NO_COLOR is set."""
     monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "xterm-256color")
     payload = make_mock_calendar_payload("monouser", total_contributions=100)
     cal = ContributionNormalizer.normalize_graphql_response(payload, "monouser", 2026)
 
@@ -172,3 +177,74 @@ def test_dynamic_terminal_width_chunking():
     CalendarRenderer(console=Console(file=s35, color_system=None, width=35)).render(cal, compact=True, show_stats=False)
     assert "Part 1 of 4" in s35.getvalue()
     assert "Part 4 of 4" in s35.getvalue()
+
+
+def test_renderer_ascii_mode():
+    """Verify explicit ascii_mode forces ASCII symbols, border, bullet, and arrow."""
+    payload = make_mock_calendar_payload("asciiuser", total_contributions=50)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "asciiuser", 2026)
+
+    string_io = io.StringIO()
+    console = Console(file=string_io, color_system=None, width=80)
+    renderer = CalendarRenderer(console=console)
+
+    renderer.render(calendar=cal, ascii_mode=True, show_stats=True)
+    output = string_io.getvalue()
+
+    # ASCII bullet in header
+    assert "*" in output
+    assert "•" not in output
+
+    # ASCII panel border
+    assert "+" in output
+    assert "╭" not in output
+    assert "─" not in output
+
+    # ASCII arrow in split chunk header (width=80 causes split into 2 chunks)
+    assert "->" in output
+    assert "→" not in output
+
+    # Output must be encodable as pure ASCII
+    output.encode("ascii")
+
+
+def test_renderer_non_utf8_automatic_fallback(monkeypatch):
+    """Verify automatic degradation to ASCII when supports_unicode() is False."""
+    monkeypatch.setattr("contrigraph.rendering.renderer.supports_unicode", lambda: False)
+    monkeypatch.setattr("contrigraph.rendering.themes.supports_unicode", lambda: False)
+
+    payload = make_mock_calendar_payload("legacyuser", total_contributions=75)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "legacyuser", 2026)
+
+    string_io = io.StringIO()
+    console = Console(file=string_io, color_system=None, width=80)
+    renderer = CalendarRenderer(console=console)
+
+    # Even with default github-dark requested, it must auto-degrade to ascii
+    renderer.render(calendar=cal, theme_name="github-dark", show_stats=True)
+    output = string_io.getvalue()
+
+    assert "*" in output
+    assert "•" not in output
+    assert "->" in output
+    assert "→" not in output
+    output.encode("ascii")
+
+
+def test_renderer_ascii_stream_encoding():
+    """Verify rendering directly to an ASCII-encoded text stream without error."""
+    payload = make_mock_calendar_payload("streamuser", total_contributions=120)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "streamuser", 2026)
+
+    raw_buffer = io.BytesIO()
+    ascii_stream = io.TextIOWrapper(raw_buffer, encoding="ascii", errors="strict")
+    console = Console(file=ascii_stream, color_system=None, width=80)
+    renderer = CalendarRenderer(console=console)
+
+    # Must complete cleanly without UnicodeEncodeError
+    renderer.render(calendar=cal, show_stats=True)
+    ascii_stream.flush()
+
+    raw_output = raw_buffer.getvalue().decode("ascii")
+    assert "streamuser" in raw_output
+    assert "*" in raw_output

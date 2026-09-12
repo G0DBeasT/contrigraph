@@ -3,6 +3,8 @@
 import os
 from dataclasses import dataclass
 
+from contrigraph.utils.platform import supports_unicode
+
 
 @dataclass(frozen=True)
 class ColorTheme:
@@ -68,8 +70,8 @@ THEMES: dict[str, ColorTheme] = {
 
 def get_theme(name: str = "github-dark", no_color: bool = False, ascii_mode: bool = False) -> ColorTheme:
     """Resolve theme based on flags and preferences."""
-    if ascii_mode:
+    if ascii_mode or not supports_unicode() or os.environ.get("TERM") == "dumb":
         return THEMES["ascii"]
-    if no_color or "NO_COLOR" in os.environ or os.environ.get("TERM") == "dumb":
+    if no_color or "NO_COLOR" in os.environ:
         return THEMES["monochrome"]
     return THEMES.get(name.lower(), THEMES["github-dark"])
