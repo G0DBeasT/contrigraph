@@ -120,3 +120,55 @@ def test_calendar_renderer_type_hints():
     hints = typing.get_type_hints(CalendarRenderer._render_matrix_block)
     assert "weeks" in hints
     assert hints["return"] is type(None)
+
+
+def test_dynamic_terminal_width_chunking():
+    """Verify calendar dynamically chunks to fit terminal width without line wrapping."""
+    payload = make_mock_calendar_payload("narrowuser", total_contributions=300)
+    cal = ContributionNormalizer.normalize_graphql_response(payload, "narrowuser", 2026)
+
+    test_widths = [120, 100, 80, 70, 60, 50, 45, 40, 35, 30]
+
+    for width in test_widths:
+        string_io = io.StringIO()
+        console = Console(file=string_io, color_system=None, width=width)
+        renderer = CalendarRenderer(console=console)
+
+        renderer.render(calendar=cal, theme_name="ascii", show_stats=False, compact=True)
+        output = string_io.getvalue()
+
+        # Check that each printed row in the matrix does not exceed terminal width
+        for line in output.splitlines():
+            # Weekday rows start with 3 spaces or weekday label + space (e.g. "Mon ", "   ")
+            if any(line.startswith(prefix) for prefix in ("Mon ", "Wed ", "Fri ", "    ")):
+                assert len(line) <= width, f"Line '{line}' (len={len(line)}) exceeded terminal width {width}"
+
+    # Verify specific chunk counts for key responsive breakpoints
+    # Width 120 -> 1 chunk (no Part headers)
+    s120 = io.StringIO()
+    CalendarRenderer(console=Console(file=s120, color_system=None, width=120)).render(cal, compact=True, show_stats=False)
+    assert "Part 1" not in s120.getvalue()
+
+    # Width 80 -> 2 chunks
+    s80 = io.StringIO()
+    CalendarRenderer(console=Console(file=s80, color_system=None, width=80)).render(cal, compact=True, show_stats=False)
+    assert "Part 1: Early Period" in s80.getvalue()
+    assert "Part 2: Later Period" in s80.getvalue()
+
+    # Width 50 (Termux portrait) -> 3 chunks
+    s50 = io.StringIO()
+    CalendarRenderer(console=Console(file=s50, color_system=None, width=50)).render(cal, compact=True, show_stats=False)
+    assert "Part 1 of 3" in s50.getvalue()
+    assert "Part 2 of 3" in s50.getvalue()
+    assert "Part 3 of 3" in s50.getvalue()
+
+    # Width 45 (Narrow smartphone Termux) -> 3 chunks
+    s45 = io.StringIO()
+    CalendarRenderer(console=Console(file=s45, color_system=None, width=45)).render(cal, compact=True, show_stats=False)
+    assert "Part 1 of 3" in s45.getvalue()
+
+    # Width 35 (Very narrow split pane) -> 4 chunks
+    s35 = io.StringIO()
+    CalendarRenderer(console=Console(file=s35, color_system=None, width=35)).render(cal, compact=True, show_stats=False)
+    assert "Part 1 of 4" in s35.getvalue()
+    assert "Part 4 of 4" in s35.getvalue()

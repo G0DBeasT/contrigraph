@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 
 from rich.console import Console
 from rich.panel import Panel
@@ -60,19 +61,54 @@ class CalendarRenderer:
         if not compact:
             self._render_header(calendar, stats, theme)
 
-        # Decide whether to split into halves based on terminal width
+        # Dynamic terminal-width chunking
         total_weeks = len(calendar.weeks)
-        required_width = 6 + (total_weeks * 2)
+        if total_weeks > 0:
+            label_width = 4
+            safety_padding = 2
+            required_full_width = label_width + (total_weeks * 2)
 
-        if required_width > term_width and total_weeks > 26:
-            # Render split view: Weeks 0-25 (H1) and Weeks 26+ (H2)
-            half = total_weeks // 2
-            self.console.print("\n[bold cyan]Part 1: Early Period[/bold cyan]")
-            self._render_matrix_block(calendar.weeks[:half], calendar.months, 0, theme)
-            self.console.print("\n[bold cyan]Part 2: Later Period[/bold cyan]")
-            self._render_matrix_block(calendar.weeks[half:], calendar.months, half, theme)
-        else:
-            self._render_matrix_block(calendar.weeks, calendar.months, 0, theme)
+            if required_full_width <= term_width:
+                chunks = [(0, total_weeks)]
+            else:
+                usable_cols = max(label_width + 2, term_width - safety_padding)
+                max_weeks_per_chunk = max(1, (usable_cols - label_width) // 2)
+                num_chunks = max(2, math.ceil(total_weeks / max_weeks_per_chunk))
+
+                base_size = total_weeks // num_chunks
+                remainder = total_weeks % num_chunks
+                chunks = []
+                curr = 0
+                for i in range(num_chunks):
+                    chunk_len = base_size + (1 if i < remainder else 0)
+                    chunks.append((curr, curr + chunk_len))
+                    curr += chunk_len
+
+            if len(chunks) == 1:
+                self._render_matrix_block(calendar.weeks, calendar.months, 0, theme)
+            else:
+                for idx, (start_idx, end_idx) in enumerate(chunks):
+                    start_date = None
+                    for d in calendar.weeks[start_idx].days:
+                        if d.date:
+                            start_date = d.date
+                            break
+                    end_date = None
+                    for d in reversed(calendar.weeks[end_idx - 1].days):
+                        if d.date:
+                            end_date = d.date
+                            break
+
+                    date_str = f" ({start_date} → {end_date})" if (start_date and end_date) else ""
+
+                    if len(chunks) == 2:
+                        period_name = "Early Period" if idx == 0 else "Later Period"
+                        header_title = f"Part {idx + 1}: {period_name}{date_str}"
+                    else:
+                        header_title = f"Part {idx + 1} of {len(chunks)}{date_str}"
+
+                    self.console.print(f"\n[bold cyan]{header_title}[/bold cyan]")
+                    self._render_matrix_block(calendar.weeks[start_idx:end_idx], calendar.months, start_idx, theme)
 
         # Render Legend
         self._render_legend(theme)
@@ -112,7 +148,6 @@ class CalendarRenderer:
         num_weeks = len(weeks)
 
         # Build Month Header Line
-        month_line = ["    "]  # 4 chars for left margin
         month_chars = [" "] * (num_weeks * 2)
 
         for m in all_months:
@@ -123,6 +158,18 @@ class CalendarRenderer:
                 for i, char in enumerate(name):
                     if pos + i < len(month_chars):
                         month_chars[pos + i] = char
+            elif m.first_week_idx < start_week_offset and (m.first_week_idx + m.total_weeks) > start_week_offset:
+                # Spanning month from previous block: show at start if room exists
+                name = m.name[:3]
+                first_inner = min(
+                    (other.first_week_idx - start_week_offset for other in all_months
+                     if 0 <= (other.first_week_idx - start_week_offset) < num_weeks),
+                    default=num_weeks,
+                )
+                if first_inner >= 2:
+                    for i, char in enumerate(name):
+                        if i < len(month_chars):
+                            month_chars[i] = char
 
         month_text = Text("    " + "".join(month_chars), style="dim")
         self.console.print(month_text)

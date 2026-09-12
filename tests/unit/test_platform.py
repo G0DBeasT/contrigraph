@@ -64,7 +64,15 @@ def test_secure_file_permissions(temp_dir):
 
 def test_terminal_detection(monkeypatch):
     """Verify terminal width and feature detection."""
-    assert get_terminal_width() >= 40
+    assert get_terminal_width() >= 20
+
+    # Verify narrow terminal size clamping
+    import shutil
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda fallback: os.terminal_size((15, 24)))
+    assert get_terminal_width() == 20
+
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda fallback: os.terminal_size((45, 24)))
+    assert get_terminal_width() == 45
 
     monkeypatch.setenv("NO_COLOR", "1")
     assert not supports_color()

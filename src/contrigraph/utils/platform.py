@@ -85,7 +85,7 @@ def get_terminal_width(default: int = 80) -> int:
     """Get the current terminal width in columns."""
     try:
         cols, _ = shutil.get_terminal_size(fallback=(default, 24))
-        return max(cols, 40)
+        return max(cols, 20)
     except Exception:
         return default
 
