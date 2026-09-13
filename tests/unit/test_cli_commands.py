@@ -1,8 +1,10 @@
 """Unit tests covering all CLI command switches and error handling branches."""
 
+import sys
 from unittest.mock import patch
 import pytest
 
+from contrigraph.auth.manager import AuthManager
 from contrigraph.cli.doctor import Doctor
 from contrigraph.cli.main import build_parser, main
 from contrigraph.utils.errors import (
@@ -233,5 +235,105 @@ def test_cli_auth_error_traceback_with_verbose(mock_env):
             res = main(["auth", "login", "-v", "--token", "bad_token", "--no-validate"])
             assert res == 1
             assert mock_pe.called
+
+
+# ---------------------------------------------------------------------------
+# Doctor expanded diagnostics (#12)
+# ---------------------------------------------------------------------------
+
+def test_doctor_os_detection_termux(monkeypatch):
+    """Verify Doctor detects Termux environment via TERMUX_VERSION and PREFIX."""
+    monkeypatch.setenv("TERMUX_VERSION", "0.118.0")
+    assert Doctor._detect_os_description() == "Android/Termux v0.118.0"
+
+    monkeypatch.delenv("TERMUX_VERSION")
+    monkeypatch.setenv("PREFIX", "/data/data/com.termux/files/usr")
+    assert Doctor._detect_os_description() == "Android/Termux"
+
+
+def test_doctor_os_detection_linux_distro(monkeypatch):
+    """Verify Doctor identifies specific Linux distributions."""
+    monkeypatch.delenv("TERMUX_VERSION", raising=False)
+    monkeypatch.delenv("PREFIX", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    import platform
+    monkeypatch.setattr(
+        platform,
+        "freedesktop_os_release",
+        lambda: {"PRETTY_NAME": "Ubuntu 24.04 LTS", "NAME": "Ubuntu"},
+        raising=False,
+    )
+
+    assert Doctor._detect_os_description() == "Linux (Ubuntu 24.04 LTS)"
+
+
+def test_doctor_gh_cli_detection(monkeypatch):
+    """Verify Doctor reports GitHub CLI presence and version."""
+    import shutil
+    import subprocess
+
+    # When gh is not installed
+    monkeypatch.setattr(shutil, "which", lambda cmd: None)
+    status, details = Doctor._check_gh_cli()
+    assert "NOT FOUND" in status
+    assert "(Optional)" in details
+
+    # When gh is installed
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/gh")
+
+    class MockProcess:
+        returncode = 0
+        stdout = "gh version 2.45.0 (2024-03-04)\nhttps://github.com/cli/cli"
+
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: MockProcess())
+    status, details = Doctor._check_gh_cli()
+    assert "INSTALLED" in status
+    assert "gh version 2.45.0" in details
+    assert "/usr/bin/gh" in details
+
+
+def test_doctor_narrow_terminal_warning(capsys):
+    """Verify Doctor warns when terminal width is < 58 columns."""
+    from rich.console import Console
+
+    narrow_console = Console(width=50)
+    doc = Doctor(console=narrow_console)
+
+    with patch.object(Doctor, "_check_gh_cli", return_value=("[green]✓ INSTALLED[/green]", "gh")):
+        with patch("httpx.Client.get") as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = "Keep it logically awesome."
+            doc.run_diagnostics()
+
+    captured = capsys.readouterr()
+    assert "NARROW" in captured.out or "< 58 cols" in captured.out
+
+
+def test_doctor_unauthenticated_network_check(capsys):
+    """Verify Doctor performs basic HTTPS reachability check when unauthenticated."""
+    from rich.console import Console
+    import httpx
+
+    doc = Doctor(console=Console(width=80))
+
+    # Mock unauthenticated status
+    with patch.object(AuthManager, "get_token", return_value=None), \
+         patch.object(Doctor, "_check_gh_cli", return_value=("[dim]NOT FOUND[/dim]", "none")):
+
+        # Successful HTTPS reachability
+        with patch("httpx.Client.get") as mock_get:
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.text = "Mind your words, they become actions."
+            doc.run_diagnostics()
+            captured = capsys.readouterr()
+            assert "REACHABLE" in captured.out
+            assert "api.github.com" in captured.out
+
+        # Failed HTTPS reachability
+        with patch("httpx.Client.get", side_effect=httpx.ConnectError("Connection refused")):
+            doc.run_diagnostics()
+            captured = capsys.readouterr()
+            assert "UNREACHABLE" in captured.out
 
 

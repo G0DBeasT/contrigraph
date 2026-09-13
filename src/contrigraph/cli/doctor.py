@@ -1,6 +1,13 @@
 """Doctor command to diagnose environment, auth, network, and terminal health."""
 
+import os
+import platform
+import shutil
+import subprocess
 import sys
+from pathlib import Path
+
+import httpx
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -26,6 +33,79 @@ class Doctor:
         self.config_mgr = ConfigManager()
         self.auth_mgr = AuthManager()
 
+    @staticmethod
+    def _detect_os_description() -> str:
+        """Detect detailed operating system, distribution name, or Termux environment."""
+        # 1. Check for Termux environment
+        termux_ver = os.environ.get("TERMUX_VERSION")
+        prefix = os.environ.get("PREFIX", "")
+        if termux_ver or "com.termux" in prefix:
+            ver_str = f" v{termux_ver}" if termux_ver else ""
+            return f"Android/Termux{ver_str}"
+
+        # 2. Check for Linux distributions
+        if sys.platform.startswith("linux"):
+            try:
+                if hasattr(platform, "freedesktop_os_release"):
+                    info = platform.freedesktop_os_release()
+                    pretty = info.get("PRETTY_NAME") or info.get("NAME")
+                    if pretty:
+                        return f"Linux ({pretty})"
+            except Exception:
+                pass
+
+            try:
+                os_release = Path("/etc/os-release")
+                if os_release.exists():
+                    for line in os_release.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("PRETTY_NAME="):
+                            val = line.split("=", 1)[1].strip("\"'")
+                            if val:
+                                return f"Linux ({val})"
+                        elif line.startswith("NAME=") and not line.startswith("PRETTY_NAME="):
+                            val = line.split("=", 1)[1].strip("\"'")
+                            if val:
+                                return f"Linux ({val})"
+            except Exception:
+                pass
+
+            return "Linux (Generic)"
+
+        elif sys.platform == "darwin":
+            ver = platform.mac_ver()[0]
+            return f"macOS {ver}" if ver else "macOS"
+
+        elif sys.platform == "win32":
+            rel = platform.release()
+            return f"Windows {rel}" if rel else "Windows"
+
+        return sys.platform
+
+    @staticmethod
+    def _check_gh_cli() -> tuple[str, str]:
+        """Check presence and version of GitHub CLI (gh)."""
+        gh_path = shutil.which("gh")
+        if not gh_path:
+            return "[dim]NOT FOUND[/dim]", "(Optional) Used for auto-detecting GitHub credentials"
+
+        gh_ver = ""
+        try:
+            res = subprocess.run(
+                ["gh", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                first_line = res.stdout.strip().splitlines()[0]
+                gh_ver = first_line
+        except Exception:
+            pass
+
+        details = f"{gh_ver} ({gh_path})" if gh_ver else f"Installed ({gh_path})"
+        return "[green]✓ INSTALLED[/green]", details
+
     def run_diagnostics(self) -> bool:
         """Run complete diagnostic suite and display results."""
         self.console.print(Panel("[bold white]Contrigraph System Doctor[/bold white]", border_style="cyan", expand=False))
@@ -48,9 +128,14 @@ class Doctor:
         # 2. Operating System / Paths
         config_dir = PlatformPaths.get_config_dir()
         cache_dir = PlatformPaths.get_cache_dir()
-        table.add_row("OS Platform", "[green]✓ OK[/green]", f"{sys.platform} (Config: {config_dir})")
+        os_desc = self._detect_os_description()
+        table.add_row("OS Platform", "[green]✓ OK[/green]", f"{os_desc} (Config: {config_dir})")
 
-        # 3. Configuration
+        # 3. GitHub CLI (gh)
+        gh_status, gh_details = self._check_gh_cli()
+        table.add_row("GitHub CLI (gh)", gh_status, gh_details)
+
+        # 4. Configuration
         if self.config_mgr.is_configured():
             try:
                 cfg = self.config_mgr.load_config()
@@ -62,7 +147,7 @@ class Doctor:
             table.add_row("Configuration", "[yellow]! NOT SET[/yellow]", "Run 'ghcontrib setup' to initialize")
             all_ok = False
 
-        # 4. Authentication & Credentials
+        # 5. Authentication & Credentials
         auth_status = self.auth_mgr.get_auth_status()
         token = self.auth_mgr.get_token()
 
@@ -72,30 +157,53 @@ class Doctor:
             table.add_row("Authentication", "[yellow]! MISSING[/yellow]", "Run 'ghcontrib auth login' to authenticate")
             all_ok = False
 
-        # 5. Network & GitHub GraphQL API
+        # 6. Network & GitHub API
         if token:
             try:
                 client = GitHubClient(token=token, timeout=8.0)
                 rate_data = client.check_rate_limit()
                 limit = rate_data.get("limit", 5000)
                 remaining = rate_data.get("remaining", 0)
-                table.add_row("GitHub GraphQL API", "[green]✓ CONNECTED[/green]", f"Rate Limit: {remaining:,} / {limit:,} remaining")
+                table.add_row("GitHub API", "[green]✓ CONNECTED[/green]", f"Rate Limit: {remaining:,} / {limit:,} remaining")
             except Exception as err:
-                table.add_row("GitHub GraphQL API", "[red]✗ FAILED[/red]", str(err)[:80])
+                table.add_row("GitHub API", "[red]✗ FAILED[/red]", str(err)[:80])
                 all_ok = False
         else:
-            table.add_row("GitHub GraphQL API", "[dim]SKIPPED[/dim]", "Requires token to test GraphQL rate limit")
+            try:
+                with httpx.Client(timeout=5.0) as http_client:
+                    res = http_client.get(
+                        "https://api.github.com/zen",
+                        headers={"User-Agent": "contrigraph-doctor/0.1.0"},
+                    )
+                    if res.status_code == 200:
+                        zen_msg = res.text.strip().replace("\n", " ")
+                        table.add_row("GitHub API (HTTPS)", "[green]✓ REACHABLE[/green]", f"Connected to api.github.com (Zen: \"{zen_msg}\")")
+                    else:
+                        table.add_row("GitHub API (HTTPS)", "[yellow]! HTTP ERROR[/yellow]", f"api.github.com returned HTTP {res.status_code}")
+            except Exception as err:
+                table.add_row("GitHub API (HTTPS)", "[red]✗ UNREACHABLE[/red]", f"Cannot connect to api.github.com: {err}"[:80])
+                all_ok = False
 
-        # 6. Terminal Color & Unicode Support
+        # 7. Terminal Display & Dimensions
         caps = TerminalCapabilities.detect(console=self.console)
-        term_details = (
-            f"Width: {caps.width} cols | Color: {'Yes' if caps.supports_color else 'No'} | "
-            f"TrueColor: {'Yes' if caps.supports_truecolor else 'No'} | "
-            f"UTF-8: {'Yes' if caps.supports_unicode else 'No'}"
-        )
-        table.add_row("Terminal Display", "[green]✓ OK[/green]", term_details)
+        if caps.width < 58:
+            term_status = "[yellow]! NARROW[/yellow]"
+            term_details = (
+                f"Width: {caps.width} cols (< 58 cols; graph columns may wrap) | "
+                f"Color: {'Yes' if caps.supports_color else 'No'} | "
+                f"TrueColor: {'Yes' if caps.supports_truecolor else 'No'} | "
+                f"UTF-8: {'Yes' if caps.supports_unicode else 'No'}"
+            )
+        else:
+            term_status = "[green]✓ OK[/green]"
+            term_details = (
+                f"Width: {caps.width} cols | Color: {'Yes' if caps.supports_color else 'No'} | "
+                f"TrueColor: {'Yes' if caps.supports_truecolor else 'No'} | "
+                f"UTF-8: {'Yes' if caps.supports_unicode else 'No'}"
+            )
+        table.add_row("Terminal Display", term_status, term_details)
 
-        # 7. Cache Directory
+        # 8. Cache Directory
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
             test_file = cache_dir / ".doctor_test"
