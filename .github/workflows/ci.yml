@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ---------------------------------------------------------------------------
+# Job 1: Python version matrix on ubuntu-latest
+# ---------------------------------------------------------------------------
+jobs:
+  test:
+    name: "Test · Python ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.14"
+            experimental: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Check uv.lock is up-to-date
+        run: uv lock --check
+
+      - name: Install project with dev dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run test suite
+        run: pytest -q
+        continue-on-error: ${{ matrix.experimental == true }}
+
+  # -------------------------------------------------------------------------
+  # Job 2: Package build + twine check
+  # -------------------------------------------------------------------------
+  package:
+    name: "Package build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install --quiet build twine
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: Verify package metadata (twine check)
+        run: twine check dist/*
+
+      - name: Confirm py.typed is bundled in wheel
+        run: unzip -l dist/*.whl | grep py.typed
+
+  # -------------------------------------------------------------------------
+  # Job 3: Linux distribution matrix (containerised)
+  # -------------------------------------------------------------------------
+  distro:
+    name: "Distro · ${{ matrix.distro }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: fedora
+            image: fedora:latest
+            install: dnf install -y python3 python3-pip git
+          - distro: debian
+            image: debian:bookworm-slim
+            install: apt-get update -qq && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git
+          - distro: ubuntu
+            image: ubuntu:24.04
+            install: apt-get update -qq && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git
+          - distro: arch
+            image: archlinux:latest
+            install: pacman -Syu --noconfirm python python-pip git
+          - distro: alpine
+            image: alpine:latest
+            install: apk add --no-cache python3 py3-pip git
+
+    container:
+      image: ${{ matrix.image }}
+      options: --security-opt seccomp=unconfined
+
+    steps:
+      - name: Install system dependencies
+        run: ${{ matrix.install }}
+
+      - uses: actions/checkout@v4
+
+      - name: Create venv and install contrigraph
+        run: |
+          python3 -m venv .venv || python3 -m virtualenv .venv
+          . .venv/bin/activate
+          pip install --quiet -e ".[dev]"
+
+      - name: Run test suite inside venv
+        run: |
+          . .venv/bin/activate
+          pytest -q
+
+      - name: Smoke-test entry points
+        run: |
+          . .venv/bin/activate
+          ghcontrib --help
+          contrigraph --help
+          github-contrib --help
+          python -m contrigraph --help
+
+  # -------------------------------------------------------------------------
+  # Job 4: Minimal / Termux-style environment smoke tests
+  # -------------------------------------------------------------------------
+  minimal-env:
+    name: "Minimal env · ${{ matrix.name }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "dumb terminal"
+            env_vars: "TERM=dumb"
+          - name: "no colour"
+            env_vars: "NO_COLOR=1 TERM=dumb"
+          - name: "ASCII encoding"
+            env_vars: "PYTHONIOENCODING=ascii LANG=C LC_ALL=C"
+          - name: "unset HOME (Termux-style)"
+            env_vars: "TERMUX_VERSION=0.118 PREFIX=/data/data/com.termux/files/usr"
+            unset_home: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install contrigraph with dev dependencies
+        run: pip install --quiet -e ".[dev]"
+
+      - name: Run tests with env overrides (HOME set)
+        if: ${{ !matrix.unset_home }}
+        env:
+          TERM: ${{ contains(matrix.env_vars, 'TERM=dumb') && 'dumb' || '' }}
+          NO_COLOR: ${{ contains(matrix.env_vars, 'NO_COLOR=1') && '1' || '' }}
+          PYTHONIOENCODING: ${{ contains(matrix.env_vars, 'PYTHONIOENCODING=ascii') && 'ascii' || '' }}
+          LANG: ${{ contains(matrix.env_vars, 'LANG=C') && 'C' || '' }}
+          LC_ALL: ${{ contains(matrix.env_vars, 'LC_ALL=C') && 'C' || '' }}
+        run: pytest -q
+
+      - name: Run tests with unset HOME (Termux-style)
+        if: ${{ matrix.unset_home }}
+        run: |
+          env -u HOME \
+            TERMUX_VERSION=0.118 \
+            PREFIX=/data/data/com.termux/files/usr \
+            pytest -q
+
+      - name: Smoke-test --help with env overrides (HOME set)
+        if: ${{ !matrix.unset_home }}
+        env:
+          TERM: ${{ contains(matrix.env_vars, 'TERM=dumb') && 'dumb' || '' }}
+          NO_COLOR: ${{ contains(matrix.env_vars, 'NO_COLOR=1') && '1' || '' }}
+          PYTHONIOENCODING: ${{ contains(matrix.env_vars, 'PYTHONIOENCODING=ascii') && 'ascii' || '' }}
+          LANG: ${{ contains(matrix.env_vars, 'LANG=C') && 'C' || '' }}
+          LC_ALL: ${{ contains(matrix.env_vars, 'LC_ALL=C') && 'C' || '' }}
+        run: python -m contrigraph --help
+
+      - name: Smoke-test --help with unset HOME (Termux-style)
+        if: ${{ matrix.unset_home }}
+        run: |
+          env -u HOME \
+            TERMUX_VERSION=0.118 \
+            PREFIX=/data/data/com.termux/files/usr \
+            python -m contrigraph --help
