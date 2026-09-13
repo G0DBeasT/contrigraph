@@ -118,16 +118,12 @@ def cmd_auth(args: argparse.Namespace) -> int:
             console.print("[bold red]Error:[/bold red] Token cannot be empty.")
             return 1
 
-        try:
-            with console.status("[bold green]Validating token with GitHub...[/bold green]"):
-                creds = auth_mgr.login(token, validate=not args.no_validate)
-            user_msg = f" as @{creds.username}" if creds.username else ""
-            console.print(f"\n[bold green]✓ Successfully authenticated{user_msg}![/bold green]")
-            console.print(f"[dim]Credentials securely stored in {auth_mgr.auth_path}[/dim]\n")
-            return 0
-        except AuthError as err:
-            console.print(f"\n[bold red]Authentication failed:[/bold red] {err}")
-            return 1
+        with console.status("[bold green]Validating token with GitHub...[/bold green]"):
+            creds = auth_mgr.login(token, validate=not args.no_validate)
+        user_msg = f" as @{creds.username}" if creds.username else ""
+        console.print(f"\n[bold green]✓ Successfully authenticated{user_msg}![/bold green]")
+        console.print(f"[dim]Credentials securely stored in {auth_mgr.auth_path}[/dim]\n")
+        return 0
 
     elif action == "logout":
         auth_mgr.logout()
@@ -293,32 +289,55 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if success else 1
 
 
+class ContrigraphArgumentParser(argparse.ArgumentParser):
+    """Custom ArgumentParser ensuring verbose is always present as a boolean."""
+
+    def parse_args(
+        self,
+        args: Sequence[str] | None = None,
+        namespace: argparse.Namespace | None = None,
+    ) -> argparse.Namespace:
+        ns = super().parse_args(args=args, namespace=namespace)
+        if not hasattr(ns, "verbose"):
+            ns.verbose = False
+        return ns
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct command-line argument parser."""
-    parser = argparse.ArgumentParser(
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Show detailed debug trace on errors",
+    )
+
+    parser = ContrigraphArgumentParser(
         prog="ghcontrib",
         description="GitHub Contribution Graph CLI for Fedora and modern terminals.",
+        parents=[common_parser],
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed debug trace on errors")
     parser.add_argument("--version", action="version", version=f"contrigraph {contrigraph.__version__}")
 
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
     # 1. setup
-    p_setup = subparsers.add_parser("setup", help="First-time setup for username and preferences")
+    p_setup = subparsers.add_parser("setup", parents=[common_parser], help="First-time setup for username and preferences")
     p_setup.add_argument("--user", "--username", dest="username", help="GitHub username")
     p_setup.add_argument("--email", dest="email", help="User email address")
     p_setup.add_argument("--theme", dest="theme", choices=list(THEMES.keys()), help="Color theme")
 
     # 2. auth
-    p_auth = subparsers.add_parser("auth", help="Manage GitHub authentication")
+    p_auth = subparsers.add_parser("auth", parents=[common_parser], help="Manage GitHub authentication")
     p_auth.add_argument("auth_action", nargs="?", choices=["login", "status", "logout"], default="status", help="Auth action")
     p_auth.add_argument("--token", help="GitHub Personal Access Token (deprecated: use --token-stdin or interactive prompt)")
     p_auth.add_argument("--token-stdin", action="store_true", help="Read GitHub Personal Access Token from standard input")
     p_auth.add_argument("--no-validate", action="store_true", help="Skip remote token validation during login")
 
     # 3. show
-    p_show = subparsers.add_parser("show", help="Display contribution calendar")
+    p_show = subparsers.add_parser("show", parents=[common_parser], help="Display contribution calendar")
     p_show.add_argument("--user", "--username", dest="username", help="Target GitHub username")
     p_show.add_argument("--year", type=int, help="Target calendar year (e.g. 2026)")
     p_show.add_argument("--theme", choices=list(THEMES.keys()), help="Color theme")
@@ -330,13 +349,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("--format", choices=["terminal", "json", "csv"], default="terminal", help="Output format")
 
     # 4. stats
-    p_stats = subparsers.add_parser("stats", help="Display contribution activity statistics only")
+    p_stats = subparsers.add_parser("stats", parents=[common_parser], help="Display contribution activity statistics only")
     p_stats.add_argument("--user", "--username", dest="username", help="Target GitHub username")
     p_stats.add_argument("--year", type=int, help="Target calendar year")
     p_stats.add_argument("--refresh", action="store_true", help="Force refresh data")
 
     # 5. refresh
-    p_refresh = subparsers.add_parser("refresh", help="Force fresh data from GitHub and update graph")
+    p_refresh = subparsers.add_parser("refresh", parents=[common_parser], help="Force fresh data from GitHub and update graph")
     p_refresh.add_argument("--user", "--username", dest="username", help="Target GitHub username")
     p_refresh.add_argument("--year", type=int, help="Target calendar year")
     p_refresh.add_argument("--theme", choices=list(THEMES.keys()), help="Color theme")
@@ -347,16 +366,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_refresh.add_argument("--format", choices=["terminal", "json", "csv"], default="terminal", help="Output format")
 
     # 6. config
-    p_config = subparsers.add_parser("config", help="View or modify user configuration")
+    p_config = subparsers.add_parser("config", parents=[common_parser], help="View or modify user configuration")
     p_config.add_argument("config_action", nargs="?", choices=["show", "set", "reset"], default="show")
     p_config.add_argument("key", nargs="?", help="Configuration key to set")
     p_config.add_argument("val", nargs="?", help="Configuration value")
 
     # 7. doctor
-    subparsers.add_parser("doctor", help="Run system, environment, and network diagnostics")
+    subparsers.add_parser("doctor", parents=[common_parser], help="Run system, environment, and network diagnostics")
 
     # 8. version
-    subparsers.add_parser("version", help="Show version information")
+    subparsers.add_parser("version", parents=[common_parser], help="Show version information")
 
     return parser
 
@@ -365,6 +384,8 @@ def main(args: Sequence[str] | None = None) -> int:
     """CLI main entry point with global exception handling."""
     parser = build_parser()
     parsed_args = parser.parse_args(args)
+    if not hasattr(parsed_args, "verbose"):
+        parsed_args.verbose = False
 
     cmd = parsed_args.command
 

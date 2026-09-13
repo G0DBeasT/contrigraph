@@ -161,3 +161,77 @@ def test_cli_auth_login_token_arg_warning(mock_env):
         assert res == 0
         mock_login.assert_called_once_with("ghp_arg_token_1234567890", validate=False)
 
+
+# ---------------------------------------------------------------------------
+# Global -v/--verbose flag position independence and traceback (#13)
+# ---------------------------------------------------------------------------
+
+def test_cli_verbose_flag_position_independence():
+    """Verify -v and --verbose work before, after, and within all subcommands."""
+    parser = build_parser()
+
+    # show
+    assert parser.parse_args(["show", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "show"]).verbose is True
+    assert parser.parse_args(["show", "--verbose"]).verbose is True
+    assert parser.parse_args(["--verbose", "show"]).verbose is True
+    assert parser.parse_args(["show"]).verbose is False
+
+    # stats
+    assert parser.parse_args(["stats", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "stats"]).verbose is True
+    assert parser.parse_args(["stats"]).verbose is False
+
+    # doctor
+    assert parser.parse_args(["doctor", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "doctor"]).verbose is True
+    assert parser.parse_args(["doctor"]).verbose is False
+
+    # auth
+    assert parser.parse_args(["auth", "login", "-v"]).verbose is True
+    assert parser.parse_args(["auth", "-v", "login"]).verbose is True
+    assert parser.parse_args(["-v", "auth", "login"]).verbose is True
+    assert parser.parse_args(["auth", "login"]).verbose is False
+
+    # config
+    assert parser.parse_args(["config", "show", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "config", "show"]).verbose is True
+    assert parser.parse_args(["config"]).verbose is False
+
+    # refresh
+    assert parser.parse_args(["refresh", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "refresh"]).verbose is True
+
+    # setup
+    assert parser.parse_args(["setup", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "setup"]).verbose is True
+
+    # version
+    assert parser.parse_args(["version", "-v"]).verbose is True
+    assert parser.parse_args(["-v", "version"]).verbose is True
+
+
+def test_cli_auth_error_traceback_with_verbose(mock_env):
+    """Verify auth login failures print full traceback when -v/--verbose is passed."""
+    from contrigraph.utils.errors import InvalidTokenError
+
+    with patch("contrigraph.auth.manager.AuthManager.login", side_effect=InvalidTokenError("Invalid test token")):
+        # 1. Without -v: clean error panel, no traceback
+        with patch("rich.console.Console.print_exception") as mock_pe:
+            res = main(["auth", "login", "--token", "bad_token", "--no-validate"])
+            assert res == 1
+            assert not mock_pe.called
+
+        # 2. With prefix -v: full traceback
+        with patch("rich.console.Console.print_exception") as mock_pe:
+            res = main(["-v", "auth", "login", "--token", "bad_token", "--no-validate"])
+            assert res == 1
+            assert mock_pe.called
+
+        # 3. With suffix -v: full traceback
+        with patch("rich.console.Console.print_exception") as mock_pe:
+            res = main(["auth", "login", "-v", "--token", "bad_token", "--no-validate"])
+            assert res == 1
+            assert mock_pe.called
+
+
