@@ -267,3 +267,73 @@ def test_terminal_capabilities_create_console():
     caps_none = TerminalCapabilities(width=80, height=24, is_tty=False, color_depth="none")
     console_none = caps_none.create_console()
     assert console_none.color_system is None
+
+
+# ---------------------------------------------------------------------------
+# PlatformPaths safe home directory resolution on Android/Termux (#8)
+# ---------------------------------------------------------------------------
+
+def test_safe_home_termux_fallback(monkeypatch, temp_dir):
+    """Verify fallback to Termux home directory when HOME is unset."""
+    termux_prefix = temp_dir / "usr"
+    termux_prefix.mkdir(parents=True, exist_ok=True)
+    termux_home = temp_dir / "home"
+    termux_home.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setenv("PREFIX", str(termux_prefix))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    # _safe_home should find PREFIX.parent / "home"
+    assert PlatformPaths._safe_home() == termux_home
+    assert PlatformPaths.get_config_dir() == termux_home / ".config" / "contrigraph"
+    assert PlatformPaths.get_cache_dir() == termux_home / ".cache" / "contrigraph"
+    assert PlatformPaths.get_data_dir() == termux_home / ".local" / "share" / "contrigraph"
+
+
+def test_safe_home_keyerror_android_fallback(monkeypatch, temp_dir):
+    """Verify KeyError on Path.home() (Android uid not found) falls back safely without crashing."""
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("PREFIX", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    def raise_android_keyerror():
+        raise KeyError("getpwuid(): uid not found")
+
+    monkeypatch.setattr(Path, "home", raise_android_keyerror)
+
+    # Should not raise KeyError
+    safe_home = PlatformPaths._safe_home()
+    assert isinstance(safe_home, Path)
+    assert safe_home.exists()
+
+    # Directory getters should succeed and create directories
+    config_dir = PlatformPaths.get_config_dir()
+    cache_dir = PlatformPaths.get_cache_dir()
+    data_dir = PlatformPaths.get_data_dir()
+
+    assert config_dir.exists()
+    assert cache_dir.exists()
+    assert data_dir.exists()
+
+
+def test_safe_home_runtime_error_fallback(monkeypatch):
+    """Verify RuntimeError on Path.home() (Python 3.14 unknown home) falls back safely."""
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("PREFIX", raising=False)
+
+    def raise_runtime_error():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", raise_runtime_error)
+
+    safe_home = PlatformPaths._safe_home()
+    assert isinstance(safe_home, Path)
+    assert safe_home.exists()
+

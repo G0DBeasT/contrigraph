@@ -15,20 +15,55 @@ class PlatformPaths:
     APP_NAME = "contrigraph"
 
     @classmethod
+    def _safe_home(cls) -> Path:
+        """Safely resolve user home directory with fallbacks for Android/Termux."""
+        # 1. If HOME is unset/empty and PREFIX is set (Termux environment convention)
+        if not os.environ.get("HOME", "").strip():
+            if prefix := os.environ.get("PREFIX"):
+                termux_home = Path(prefix.strip()).parent / "home"
+                if termux_home.exists():
+                    return termux_home
+
+        # 2. Try standard Path.home() (honors mocked Path.home in tests and standard $HOME)
+        try:
+            return Path.home()
+        except Exception:
+            pass
+
+        # 3. Check HOME environment variable if Path.home() failed
+        if home := os.environ.get("HOME"):
+            if home.strip():
+                return Path(home.strip())
+
+        # 4. Check Termux PREFIX convention ($PREFIX is typically /data/data/com.termux/files/usr)
+        if prefix := os.environ.get("PREFIX"):
+            termux_home = Path(prefix.strip()).parent / "home"
+            if termux_home.exists():
+                return termux_home
+
+        # 5. Safe fallback directory for non-standard environments
+        fallback = Path("/tmp")
+        if fallback.exists():
+            return fallback
+        import tempfile
+
+        return Path(tempfile.gettempdir())
+
+    @classmethod
     def get_config_dir(cls) -> Path:
         """Return the user configuration directory."""
         if sys.platform == "win32":
             base = os.environ.get("APPDATA")
-            path = Path(base) / cls.APP_NAME if base else Path.home() / f".{cls.APP_NAME}"
+            path = Path(base) / cls.APP_NAME if base else cls._safe_home() / f".{cls.APP_NAME}"
         elif sys.platform == "darwin":
-            path = Path.home() / "Library" / "Application Support" / cls.APP_NAME
+            path = cls._safe_home() / "Library" / "Application Support" / cls.APP_NAME
         else:
             # POSIX / Linux / Fedora (XDG Base Directory Specification)
             xdg_config = os.environ.get("XDG_CONFIG_HOME")
             if xdg_config:
                 path = Path(xdg_config) / cls.APP_NAME
             else:
-                path = Path.home() / ".config" / cls.APP_NAME
+                path = cls._safe_home() / ".config" / cls.APP_NAME
 
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -38,16 +73,16 @@ class PlatformPaths:
         """Return the user cache directory."""
         if sys.platform == "win32":
             base = os.environ.get("LOCALAPPDATA")
-            path = Path(base) / cls.APP_NAME / "cache" if base else Path.home() / f".{cls.APP_NAME}" / "cache"
+            path = Path(base) / cls.APP_NAME / "cache" if base else cls._safe_home() / f".{cls.APP_NAME}" / "cache"
         elif sys.platform == "darwin":
-            path = Path.home() / "Library" / "Caches" / cls.APP_NAME
+            path = cls._safe_home() / "Library" / "Caches" / cls.APP_NAME
         else:
             # POSIX / Linux / Fedora (XDG Base Directory Specification)
             xdg_cache = os.environ.get("XDG_CACHE_HOME")
             if xdg_cache:
                 path = Path(xdg_cache) / cls.APP_NAME
             else:
-                path = Path.home() / ".cache" / cls.APP_NAME
+                path = cls._safe_home() / ".cache" / cls.APP_NAME
 
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -57,15 +92,15 @@ class PlatformPaths:
         """Return the user data directory."""
         if sys.platform == "win32":
             base = os.environ.get("LOCALAPPDATA")
-            path = Path(base) / cls.APP_NAME / "data" if base else Path.home() / f".{cls.APP_NAME}" / "data"
+            path = Path(base) / cls.APP_NAME / "data" if base else cls._safe_home() / f".{cls.APP_NAME}" / "data"
         elif sys.platform == "darwin":
-            path = Path.home() / "Library" / "Application Support" / cls.APP_NAME / "data"
+            path = cls._safe_home() / "Library" / "Application Support" / cls.APP_NAME / "data"
         else:
             xdg_data = os.environ.get("XDG_DATA_HOME")
             if xdg_data:
                 path = Path(xdg_data) / cls.APP_NAME
             else:
-                path = Path.home() / ".local" / "share" / cls.APP_NAME
+                path = cls._safe_home() / ".local" / "share" / cls.APP_NAME
 
         path.mkdir(parents=True, exist_ok=True)
         return path
