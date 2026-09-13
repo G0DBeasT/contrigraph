@@ -1,12 +1,12 @@
 # Contrigraph (`ghcontrib`)
 
-> **GitHub Contribution Graph CLI for Fedora Terminal and Modern POSIX Systems**
+> **Portable GitHub Contribution Graph CLI for Linux, Termux, and modern POSIX terminals**
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Fedora%20%7C%20Linux%20%7C%20macOS%20%7C%20Windows-brightgreen.svg)](#cross-platform-architecture)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Termux%20%7C%20macOS%20%7C%20Windows-brightgreen.svg)](#installation)
 
-**Contrigraph** brings the iconic GitHub contribution calendar directly into your terminal. Designed natively for **Fedora Linux** and portable across modern terminal emulators, it renders 5-level green density blocks, computes streak statistics, caches data locally using XDG standards, and offers secure credential management.
+**Contrigraph** brings the iconic GitHub contribution calendar directly into your terminal. A portable, pure-Python CLI that runs on any Linux distribution, Android Termux, macOS, and Windows — it renders 5-level green density blocks, computes streak statistics, caches data locally using XDG standards, and offers secure credential management.
 
 ```text
 ╭──────────────── GitHub Contributions • @octocat (2026) ────────────────╮
@@ -51,7 +51,7 @@ Fri  ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■
 
 ## Requirements
 
-- **Operating System**: Fedora Linux 38/39/40/41+ (or any modern Linux, macOS, or Windows system)
+- **Operating System**: Any Linux distribution (Fedora, Ubuntu, Debian, Arch, Alpine, openSUSE, WSL), Android Termux, macOS, or Windows
 - **Python**: Python 3.10 or newer
 - **GitHub Account**: Public or private account
 - **Network**: HTTPS access to `api.github.com`
@@ -60,19 +60,60 @@ Fri  ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■
 
 ## Installation
 
-### Fedora Linux (Recommended)
+### Universal (pipx — recommended for all platforms)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/example/contrigraph.git
+pipx install git+https://github.com/G0DBeasT/contrigraph.git
+```
+
+### Universal (pip + venv)
+
+```bash
+git clone https://github.com/G0DBeasT/contrigraph.git
 cd contrigraph
-
-# 2. Set up virtual environment (optional but recommended)
 python3 -m venv .venv
-source .venv/bin/activate
-
-# 3. Install in editable mode
+source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -e .
+```
+
+### Fedora / RHEL / CentOS Stream
+
+```bash
+sudo dnf install python3 python3-pip git
+git clone https://github.com/G0DBeasT/contrigraph.git
+cd contrigraph && pip install --user -e .
+```
+
+### Debian / Ubuntu / Linux Mint
+
+```bash
+sudo apt install python3 python3-pip python3-venv git
+git clone https://github.com/G0DBeasT/contrigraph.git
+cd contrigraph && pip install --user -e .
+```
+
+### Arch Linux / Manjaro
+
+```bash
+sudo pacman -S python python-pip git
+git clone https://github.com/G0DBeasT/contrigraph.git
+cd contrigraph && pip install --user -e .
+```
+
+### Alpine Linux
+
+```bash
+apk add python3 py3-pip git
+git clone https://github.com/G0DBeasT/contrigraph.git
+cd contrigraph && pip install --break-system-packages -e .
+```
+
+### Android Termux
+
+```bash
+pkg install python git
+git clone https://github.com/G0DBeasT/contrigraph.git
+cd contrigraph && pip install -e .
 ```
 
 After installation, the commands `ghcontrib`, `contrigraph`, and `github-contrib` will be available in your PATH.

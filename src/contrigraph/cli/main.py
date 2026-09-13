@@ -316,7 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = ContrigraphArgumentParser(
         prog="ghcontrib",
-        description="GitHub Contribution Graph CLI for Fedora and modern terminals.",
+        description="Portable GitHub Contribution Graph CLI for Linux, Termux, and modern POSIX terminals.",
         parents=[common_parser],
     )
     parser.add_argument("--version", action="version", version=f"contrigraph {contrigraph.__version__}")
