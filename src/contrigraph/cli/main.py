@@ -3,7 +3,8 @@
 import argparse
 import getpass
 import sys
-from typing import Sequence
+import types
+from typing import Any, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -422,6 +423,15 @@ def main(args: Sequence[str] | None = None) -> int:
             )
         return 1
 
+
+class _CallableModule(types.ModuleType):
+    """Allow module to be callable directly when imported as `from contrigraph.cli import main`."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> int:
+        return main(*args, **kwargs)
+
+
+sys.modules[__name__].__class__ = _CallableModule
 
 if __name__ == "__main__":
     sys.exit(main())
