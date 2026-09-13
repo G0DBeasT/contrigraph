@@ -53,3 +53,36 @@ def test_full_cli_lifecycle(mock_env, monkeypatch):
     # 6. Auth logout
     res = main(["auth", "logout"])
     assert res == 0
+
+
+def test_python_m_contrigraph_execution():
+    """Verify python -m contrigraph module execution entrypoint."""
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+
+    # Test --version
+    res_ver = subprocess.run(
+        [sys.executable, "-m", "contrigraph", "--version"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert res_ver.returncode == 0
+    assert "0.1.0" in res_ver.stdout
+    assert "RuntimeWarning" not in res_ver.stderr
+
+    # Test --help
+    res_help = subprocess.run(
+        [sys.executable, "-m", "contrigraph", "--help"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert res_help.returncode == 0
+    assert "usage: ghcontrib" in res_help.stdout
+    assert "RuntimeWarning" not in res_help.stderr
+
