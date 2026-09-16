@@ -85,6 +85,9 @@ def test_terminal_detection(monkeypatch):
 
 def test_supports_truecolor(monkeypatch):
     """Verify distinction between 256-color and 24-bit TrueColor."""
+    # Ensure NO_COLOR is not set; it would suppress all color detection
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
     # When COLORTERM is truecolor or 24bit, TrueColor is supported
     monkeypatch.setenv("COLORTERM", "truecolor")
     monkeypatch.delenv("TERM", raising=False)
